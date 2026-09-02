@@ -98,7 +98,8 @@ public final class RemindersStore {
         let fields = SyncFields(title: r.title ?? "", notes: r.notes, dueDay: due?.dayKey, completed: r.isCompleted)
         return AppleItem(id: r.calendarItemIdentifier, listID: listID, fields: fields, due: due,
                          modifiedAt: r.lastModifiedDate ?? r.creationDate ?? .distantPast,
-                         isRecurring: r.hasRecurrenceRules, parentID: nil, hasAlarms: !(r.alarms ?? []).isEmpty)
+                         isRecurring: r.hasRecurrenceRules, parentID: nil, hasAlarms: !(r.alarms ?? []).isEmpty,
+                         completedAt: r.isCompleted ? (r.completionDate ?? r.lastModifiedDate) : nil)
     }
 
     static func dueDate(from c: DateComponents?) -> DueDate? {

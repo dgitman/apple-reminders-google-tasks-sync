@@ -45,6 +45,10 @@ let runner = Runner()
     runner.test("SyncPlannerTests.testRecurringCompletedInGoogleBeforeAppleAdvancesCompletesApple") { try SyncPlannerTests().testRecurringCompletedInGoogleBeforeAppleAdvancesCompletesApple() }
     runner.test("SyncPlannerTests.testSubtaskCreatedAfterParentAndMovedWhenParentLinked") { try SyncPlannerTests().testSubtaskCreatedAfterParentAndMovedWhenParentLinked() }
     runner.test("SyncPlannerTests.testHierarchyIgnoredWhenUnavailable") { try SyncPlannerTests().testHierarchyIgnoredWhenUnavailable() }
+    runner.test("ScopeTests.testOldCompletionsAreDroppedAndRecentOnesKept") { try ScopeTests().testOldCompletionsAreDroppedAndRecentOnesKept() }
+    runner.test("ScopeTests.testLinkWithBothSidesOldIsForgottenNotDeleted") { try ScopeTests().testLinkWithBothSidesOldIsForgottenNotDeleted() }
+    runner.test("ScopeTests.testLinkWithOldAppleSideGoneIsForgottenNotRestored") { try ScopeTests().testLinkWithOldAppleSideGoneIsForgottenNotRestored() }
+    runner.test("ScopeTests.testLinkStaysWhenEitherSideIsLive") { try ScopeTests().testLinkStaysWhenEitherSideIsLive() }
     runner.test("ModelTests.testDueDateKeepsTime") { try ModelTests().testDueDateKeepsTime() }
     runner.test("ModelTests.testNotesNormalization") { try ModelTests().testNotesNormalization() }
     runner.test("ModelTests.testTimeOfDay") { try ModelTests().testTimeOfDay() }

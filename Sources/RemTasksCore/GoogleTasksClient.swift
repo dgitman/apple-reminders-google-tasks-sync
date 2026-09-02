@@ -100,8 +100,10 @@ public final class GoogleTasksClient {
         let fields = SyncFields(title: t["title"] as? String ?? "", notes: t["notes"] as? String,
                                 dueDay: dueDay, completed: (t["status"] as? String) == "completed")
         let updated = (t["updated"] as? String).flatMap(Dates.parseRFC3339) ?? .distantPast
+        let completedAt = fields.completed ? ((t["completed"] as? String).flatMap(Dates.parseRFC3339) ?? updated) : nil
         return GoogleItem(id: id, listID: listID, fields: fields, modifiedAt: updated,
-                          parentID: t["parent"] as? String, position: t["position"] as? String ?? "")
+                          parentID: t["parent"] as? String, position: t["position"] as? String ?? "",
+                          completedAt: completedAt)
     }
 
     static func body(for fields: SyncFields, patch: Bool) -> [String: Any] {

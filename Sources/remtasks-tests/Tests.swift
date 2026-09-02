@@ -188,6 +188,52 @@ final class SyncPlannerTests {
     }
 }
 
+final class ScopeTests {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    var cutoff: Date { now.addingTimeInterval(-30 * 86_400) }
+    func a(_ id: String, done: Bool = false, ago days: Double = 0) -> AppleItem {
+        AppleItem(id: id, listID: "L", fields: SyncFields(title: id, completed: done), modifiedAt: now,
+                  completedAt: done ? now.addingTimeInterval(-days * 86_400) : nil)
+    }
+    func g(_ id: String, done: Bool = false, ago days: Double = 0) -> GoogleItem {
+        GoogleItem(id: id, listID: "G", fields: SyncFields(title: id, completed: done), modifiedAt: now,
+                   completedAt: done ? now.addingTimeInterval(-days * 86_400) : nil)
+    }
+    func link(_ a: String, _ g: String) -> Link {
+        Link(appleID: a, googleID: g, account: "p", appleListID: "L", googleListID: "G", fingerprint: "x", dueDay: nil, lastSyncAt: now)
+    }
+
+    func testOldCompletionsAreDroppedAndRecentOnesKept() throws {
+        let items = [a("open"), a("recent", done: true, ago: 3), a("old", done: true, ago: 90)]
+        let r = SyncScope.partition(apple: items, google: [], links: [], cutoff: cutoff)
+        try expectEqual(r.apple.map(\.id), ["open", "recent"])
+    }
+
+    func testLinkWithBothSidesOldIsForgottenNotDeleted() throws {
+        let l = link("a1", "g1")
+        let r = SyncScope.partition(apple: [a("a1", done: true, ago: 60)], google: [g("g1", done: true, ago: 60)], links: [l], cutoff: cutoff)
+        try expectEqual(r.forget, [l])
+        try expectEqual(r.links, [])
+        try expectEqual(r.apple, [])
+    }
+
+    func testLinkWithOldAppleSideGoneIsForgottenNotRestored() throws {
+        let l = link("a1", "g1")
+        let r = SyncScope.partition(apple: [], google: [g("g1", done: true, ago: 60)], links: [l], cutoff: cutoff)
+        try expectEqual(r.forget, [l])
+    }
+
+    func testLinkStaysWhenEitherSideIsLive() throws {
+        let l = link("a1", "g1")
+        let old = a("a1", done: true, ago: 60)
+        let reopened = g("g1")
+        let r = SyncScope.partition(apple: [old], google: [reopened], links: [l], cutoff: cutoff)
+        try expectEqual(r.links, [l])
+        try expectEqual(r.apple, [old])
+        try expectEqual(r.google, [reopened])
+    }
+}
+
 final class ModelTests {
     func testDueDateKeepsTime() throws {
         let apple = DueDate(year: 2026, month: 9, day: 2, hour: 15, minute: 30)

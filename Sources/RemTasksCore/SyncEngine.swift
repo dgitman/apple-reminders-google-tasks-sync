@@ -230,15 +230,22 @@ public final class SyncEngine {
 
     private func syncTasks(list: AppleList, googleListID: String, account: String) async throws {
         let c = client(account)
-        let appleItems = try await apple.items(in: list.id, hierarchy: hierarchy)
-        let googleItems = googleListID == Self.pendingListID ? [] : try await c.tasks(listID: googleListID)
-        let links = try state.links(forAppleList: list.id)
+        let allApple = try await apple.items(in: list.id, hierarchy: hierarchy)
+        let allGoogle = googleListID == Self.pendingListID ? [] : try await c.tasks(listID: googleListID)
+        let allLinks = try state.links(forAppleList: list.id)
+        let cutoff = Date().addingTimeInterval(-Double(config.completedHistoryDays) * 86_400)
+        let scope = SyncScope.partition(apple: allApple, google: allGoogle, links: allLinks, cutoff: cutoff)
+        if !scope.forget.isEmpty {
+            Log.debug("[\(list.name)] forgetting \(scope.forget.count) pairings of old completed items")
+            if !dryRun { for l in scope.forget { try state.deleteLink(appleID: l.appleID) } }
+        }
+        let (appleItems, googleItems, links) = (scope.apple, scope.google, scope.links)
         let plan = SyncPlanner.plan(apple: appleItems, google: googleItems, links: links,
                                     options: PlanOptions(allowDeletes: options.allowDeletes,
                                                          maxDeletes: config.safety.maxDeletesPerRun,
                                                          hierarchyAvailable: hierarchy.isAvailable))
         for w in plan.warnings { warn("[\(list.name)] \(w)") }
-        Log.debug("[\(list.name)] apple=\(appleItems.count) google=\(googleItems.count) links=\(links.count) actions=\(plan.actions.count)")
+        Log.debug("[\(list.name)] apple=\(appleItems.count)/\(allApple.count) google=\(googleItems.count)/\(allGoogle.count) links=\(links.count) actions=\(plan.actions.count)")
 
         for action in plan.actions {
             Log.info("[\(list.name)] \(action.summary)")

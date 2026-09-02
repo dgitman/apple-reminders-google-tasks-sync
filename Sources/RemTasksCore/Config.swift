@@ -58,18 +58,22 @@ public struct Config: Codable, Equatable {
     public var google: Google
     /// Optional path override for the Reminders SQLite store used for subtask hierarchy and groups.
     public var remindersDatabase: String?
+    /// Completed items older than this many days are left alone on both sides (not created, not deleted).
+    public var completedHistoryDays: Int
 
     public init(accounts: [String: Account], groups: [String: String] = [:], lists: [String: ListRule] = [:],
                 remindersSource: String = "iCloud", newTaskDefaults: NewTaskDefaults = .init(),
-                safety: Safety = .init(), google: Google = .init(), remindersDatabase: String? = nil) {
+                safety: Safety = .init(), google: Google = .init(), remindersDatabase: String? = nil,
+                completedHistoryDays: Int = 30) {
         self.accounts = accounts; self.groups = groups; self.lists = lists
         self.remindersSource = remindersSource; self.newTaskDefaults = newTaskDefaults
         self.safety = safety; self.google = google; self.remindersDatabase = remindersDatabase
+        self.completedHistoryDays = completedHistoryDays
     }
 
     // Codable with defaults for optional sections
     enum CodingKeys: String, CodingKey {
-        case accounts, groups, lists, remindersSource, newTaskDefaults, safety, google, remindersDatabase
+        case accounts, groups, lists, remindersSource, newTaskDefaults, safety, google, remindersDatabase, completedHistoryDays
     }
 
     public init(from decoder: Decoder) throws {
@@ -82,6 +86,7 @@ public struct Config: Codable, Equatable {
         safety = try c.decodeIfPresent(Safety.self, forKey: .safety) ?? .init()
         google = try c.decodeIfPresent(Google.self, forKey: .google) ?? .init()
         remindersDatabase = try c.decodeIfPresent(String.self, forKey: .remindersDatabase)
+        completedHistoryDays = try c.decodeIfPresent(Int.self, forKey: .completedHistoryDays) ?? 30
     }
 
     // MARK: Loading
@@ -117,6 +122,7 @@ public struct Config: Codable, Equatable {
         if let t = newTaskDefaults.dueTime, TimeOfDay(string: t) == nil {
             throw RemTasksError("newTaskDefaults.dueTime '\(t)' is not HH:MM.")
         }
+        if completedHistoryDays < 0 { throw RemTasksError("completedHistoryDays must be 0 or more.") }
         if !["file", "keychain"].contains(google.tokenStorage) {
             throw RemTasksError("google.tokenStorage must be 'file' or 'keychain'.")
         }

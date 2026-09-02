@@ -89,6 +89,7 @@ Edit `~/.config/remtasks/config.json`:
   "remindersSource": "iCloud",
   "newTaskDefaults": { "dueTime": "09:00", "alarm": true },
   "safety": { "maxDeletesPerRun": 20, "deleteLists": false },
+  "completedHistoryDays": 30,
   "google": {
     "clientSecretFile": "~/.config/remtasks/google-client.json",
     "tokenStorage": "file"
@@ -100,15 +101,18 @@ Edit `~/.config/remtasks/config.json`:
 - `groups`: Reminders group (folder) name to account key. Every list inside that group syncs there. New lists added to the group are picked up automatically.
 - `lists`: per-list rules, which take precedence over groups. `account` picks the account, `googleListName` overrides the Google list name, `skip: true` excludes the list.
 - Lists that are neither in a mapped group nor listed explicitly are ignored.
+- Google's built-in default list is usually titled "My Tasks". To pair it with an Apple list, set that list's `googleListName` to the exact existing title; otherwise a new Google list is created.
 - `newTaskDefaults`: time of day and alarm given to reminders created from Google tasks that carry a due date. Set `dueTime` to `null` for all-day.
 - `safety.maxDeletesPerRun`: more deletions than this in one run are skipped unless you pass `--allow-deletes`.
 - `safety.deleteLists`: propagate list deletions. Off by default.
+- `completedHistoryDays`: completed items older than this are left alone on both sides. They are not copied across on the first sync, and a pairing whose both halves have aged out is forgotten rather than treated as a deletion. Apple keeps a completed copy of every past occurrence of a recurring reminder, so without this the first sync would push years of history into Google.
 - `google.tokenStorage`: `file` stores refresh tokens as 0600 files under `~/.config/remtasks/tokens/`; `keychain` uses the macOS Keychain (may prompt after rebuilds when running from launchd).
 
 ## Use
 
 ```bash
 remtasks lists            # show every Reminders list, its group, and where it will sync
+remtasks google-lists     # show the Google Tasks lists in each account
 remtasks auth personal    # browser sign-in for each account key in your config
 remtasks auth work
 remtasks doctor           # check permissions, credentials, and the Reminders database

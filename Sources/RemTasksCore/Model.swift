@@ -126,12 +126,13 @@ public struct AppleItem: Equatable {
     public var isRecurring: Bool
     public var parentID: String?       // from the Reminders database; nil if unknown/top-level
     public var hasAlarms: Bool
+    public var completedAt: Date?
 
     public init(id: String, listID: String, fields: SyncFields, due: DueDate? = nil, modifiedAt: Date,
-                isRecurring: Bool = false, parentID: String? = nil, hasAlarms: Bool = false) {
+                isRecurring: Bool = false, parentID: String? = nil, hasAlarms: Bool = false, completedAt: Date? = nil) {
         self.id = id; self.listID = listID; self.fields = fields; self.due = due
         self.modifiedAt = modifiedAt; self.isRecurring = isRecurring
-        self.parentID = parentID; self.hasAlarms = hasAlarms
+        self.parentID = parentID; self.hasAlarms = hasAlarms; self.completedAt = completedAt
     }
 }
 
@@ -142,10 +143,12 @@ public struct GoogleItem: Equatable {
     public var modifiedAt: Date
     public var parentID: String?
     public var position: String
+    public var completedAt: Date?
 
-    public init(id: String, listID: String, fields: SyncFields, modifiedAt: Date, parentID: String? = nil, position: String = "") {
+    public init(id: String, listID: String, fields: SyncFields, modifiedAt: Date, parentID: String? = nil,
+                position: String = "", completedAt: Date? = nil) {
         self.id = id; self.listID = listID; self.fields = fields
-        self.modifiedAt = modifiedAt; self.parentID = parentID; self.position = position
+        self.modifiedAt = modifiedAt; self.parentID = parentID; self.position = position; self.completedAt = completedAt
     }
 
     public var due: DueDate? { fields.dueDay.flatMap(DueDate.fromDayKey) }

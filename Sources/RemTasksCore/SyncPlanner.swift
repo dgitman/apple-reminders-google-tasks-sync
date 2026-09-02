@@ -210,3 +210,54 @@ public enum SyncPlanner {
         return items.sorted { (depth($0), $0.fields.title) < (depth($1), $1.fields.title) }
     }
 }
+
+/// Limits a sync to open items plus recently completed ones, so years of completed history are
+/// neither copied to the other side nor mistaken for deletions.
+public enum SyncScope {
+    public struct Result: Equatable {
+        public var apple: [AppleItem]
+        public var google: [GoogleItem]
+        public var links: [Link]
+        /// Pairings whose items are all old completions (or gone): forget them without touching either side.
+        public var forget: [Link]
+    }
+
+    public static func inScope(_ completedAt: Date?, completed: Bool, cutoff: Date) -> Bool {
+        guard completed else { return true }
+        guard let completedAt else { return false }
+        return completedAt >= cutoff
+    }
+
+    public static func partition(apple: [AppleItem], google: [GoogleItem], links: [Link], cutoff: Date) -> Result {
+        let appleByID = Dictionary(apple.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let googleByID = Dictionary(google.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var keepApple: [AppleItem] = []
+        var keepGoogle: [GoogleItem] = []
+        var keepLinks: [Link] = []
+        var forget: [Link] = []
+        var linkedApple = Set<String>()
+        var linkedGoogle = Set<String>()
+
+        for link in links {
+            linkedApple.insert(link.appleID); linkedGoogle.insert(link.googleID)
+            let a = appleByID[link.appleID]
+            let g = googleByID[link.googleID]
+            let aLive = a.map { inScope($0.completedAt, completed: $0.fields.completed, cutoff: cutoff) } ?? false
+            let gLive = g.map { inScope($0.completedAt, completed: $0.fields.completed, cutoff: cutoff) } ?? false
+            if !aLive && !gLive {
+                forget.append(link)          // both old completions (or gone): leave them be
+                continue
+            }
+            keepLinks.append(link)
+            if let a { keepApple.append(a) }
+            if let g { keepGoogle.append(g) }
+        }
+        for a in apple where !linkedApple.contains(a.id) && inScope(a.completedAt, completed: a.fields.completed, cutoff: cutoff) {
+            keepApple.append(a)
+        }
+        for g in google where !linkedGoogle.contains(g.id) && inScope(g.completedAt, completed: g.fields.completed, cutoff: cutoff) {
+            keepGoogle.append(g)
+        }
+        return Result(apple: keepApple, google: keepGoogle, links: keepLinks, forget: forget)
+    }
+}

@@ -8,7 +8,7 @@ struct RemTasks: AsyncParsableCommand {
         commandName: "remtasks",
         abstract: "Two-way sync between Apple Reminders and Google Tasks, across multiple Google accounts.",
         version: "0.1.0",
-        subcommands: [Lists.self, Auth.self, Sync.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
+        subcommands: [Lists.self, GoogleLists.self, Auth.self, Sync.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
     )
 }
 
@@ -97,6 +97,29 @@ struct Lists: AsyncParsableCommand {
         }
         if !ctx.hierarchy.isAvailable {
             print("\nNote: Reminders database not readable, so groups are unknown. Only explicit 'lists' rules apply.")
+        }
+    }
+}
+
+// MARK: - google-lists
+
+struct GoogleLists: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "google-lists", abstract: "Show the Google Tasks lists in each signed-in account.")
+    @OptionGroup var common: CommonOptions
+
+    func run() async throws {
+        let ctx = try Context(common)
+        let listLinks = try ctx.state.listLinks()
+        for (key, acct) in ctx.config.accounts.sorted(by: { $0.key < $1.key }) {
+            print("\(key) (\(acct.email))")
+            guard try ctx.auth.storedTokens(account: key) != nil else { print("  not signed in (run: remtasks auth \(key))"); continue }
+            let client = GoogleTasksClient(auth: ctx.auth, account: key)
+            for l in try await client.lists() {
+                let tasks = try await client.tasks(listID: l.id)
+                let open = tasks.filter { !$0.fields.completed }.count
+                let linked = listLinks.first { $0.googleListID == l.id }.map { "  <- Reminders \"\($0.name)\"" } ?? ""
+                print("  \(pad(l.title, 30)) \(open) open, \(tasks.count - open) done\(linked)")
+            }
         }
     }
 }

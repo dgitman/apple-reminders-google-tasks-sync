@@ -15,6 +15,7 @@
   "remindersSource": "iCloud",
   "newTaskDefaults": { "dueTime": "09:00", "alarm": true },
   "safety": { "maxDeletesPerRun": 20, "deleteLists": false },
+  "completedHistoryDays": 30,
   "google": {
     "clientSecretFile": "~/.config/remtasks/google-client.json",
     "tokenStorage": "file"
