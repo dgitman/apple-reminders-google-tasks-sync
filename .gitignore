@@ -1,0 +1,13 @@
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+.DS_Store
+# local runtime data never belongs in the repo
+config.json
+google-client.json
+tokens/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log

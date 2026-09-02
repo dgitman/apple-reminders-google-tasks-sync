@@ -1,0 +1,22 @@
+{
+  "accounts": {
+    "personal": { "email": "you@gmail.com" },
+    "work": { "email": "you@yourcompany.com" }
+  },
+  "groups": {
+    "Personal": "personal",
+    "Business": "work"
+  },
+  "lists": {
+    "Reminders": { "account": "personal", "googleListName": "My List" },
+    "Shared Groceries": { "account": "personal" },
+    "Someday": { "skip": true }
+  },
+  "remindersSource": "iCloud",
+  "newTaskDefaults": { "dueTime": "09:00", "alarm": true },
+  "safety": { "maxDeletesPerRun": 20, "deleteLists": false },
+  "google": {
+    "clientSecretFile": "~/.config/remtasks/google-client.json",
+    "tokenStorage": "file"
+  }
+}
