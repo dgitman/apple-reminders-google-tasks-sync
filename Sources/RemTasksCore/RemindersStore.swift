@@ -19,7 +19,11 @@ public final class RemindersStore {
         default:
             let granted = try await store.requestFullAccessToReminders()
             guard granted else {
-                throw RemTasksError("Reminders access was not granted. Enable it in System Settings > Privacy & Security > Reminders.")
+                throw RemTasksError("""
+                Reminders access was not granted. macOS attributes the permission to the app that launched remtasks \
+                (e.g. Terminal or iTerm), so enable that app under System Settings > Privacy & Security > Reminders. \
+                If it is not listed there, re-trigger the prompt with:  tccutil reset Reminders com.apple.Terminal
+                """)
             }
         }
     }
