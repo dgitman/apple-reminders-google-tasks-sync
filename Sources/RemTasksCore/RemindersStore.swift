@@ -21,8 +21,10 @@ public final class RemindersStore {
             guard granted else {
                 throw RemTasksError("""
                 Reminders access was not granted. macOS attributes the permission to the app that launched remtasks \
-                (e.g. Terminal or iTerm), so enable that app under System Settings > Privacy & Security > Reminders. \
-                If it is not listed there, re-trigger the prompt with:  tccutil reset Reminders com.apple.Terminal
+                (e.g. Terminal, iTerm, Warp), so enable that app under System Settings > Privacy & Security > Reminders. \
+                If it is not listed there, re-trigger the prompt with:  tccutil reset Reminders <that app's bundle id> \
+                Terminals embedded in other apps (e.g. an editor or the Claude desktop app) usually cannot prompt at all; \
+                use a standalone terminal, or install the launchd agent, which is prompted for as 'remtasks' itself.
                 """)
             }
         }

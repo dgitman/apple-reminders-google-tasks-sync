@@ -122,7 +122,11 @@ remtasks status           # recent runs and pairing counts
 remtasks install-agent    # run 'remtasks sync' every 5 minutes via launchd
 ```
 
-The first time it touches Reminders, macOS asks for permission. If you run the launchd agent and `doctor` reports the Reminders database is not readable, grant **Full Disk Access** to the `remtasks` binary in System Settings > Privacy & Security. Without it, sync still works but subtasks and group-based mapping are unavailable to the background agent.
+The first time it touches Reminders, macOS asks for permission. The permission is attributed to the app that launched remtasks, so when you run it from Terminal, iTerm, or Warp, that app is what appears under System Settings > Privacy & Security > Reminders. Terminals embedded in other apps (editors, the Claude desktop app) usually lack a Reminders usage description and are refused silently with no dialog; use a standalone terminal, or install the launchd agent, which is prompted for as `remtasks` itself. If a dialog was dismissed, re-trigger it with `tccutil reset Reminders <bundle id>`.
+
+Google's Tasks API allows roughly 300 writes per minute per user. remtasks paces writes and backs off on quota errors, so a large first sync simply takes a few minutes.
+
+If you run the launchd agent and `doctor` reports the Reminders database is not readable, grant **Full Disk Access** to the `remtasks` binary in System Settings > Privacy & Security. Without it, sync still works but subtasks and group-based mapping are unavailable to the background agent.
 
 Logs go to `~/Library/Logs/remtasks/`.
 

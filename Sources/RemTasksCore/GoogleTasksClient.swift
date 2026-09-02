@@ -129,7 +129,8 @@ public final class GoogleTasksClient {
         var comps = URLComponents(string: base + path)!
         if !query.isEmpty { comps.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
         var lastError: Error?
-        for attempt in 0..<4 {
+        if method != "GET" { try await pace() }
+        for attempt in 0..<maxAttempts {
             var req = URLRequest(url: comps.url!)
             req.httpMethod = method
             req.setValue("Bearer \(try await auth.accessToken(account: account, force: attempt > 0 && (lastError as? HTTPError)?.status == 401))",
@@ -149,12 +150,26 @@ public final class GoogleTasksClient {
             let err = HTTPError(status: status, message: text.prefix(300).description)
             lastError = err
             if status == 401 && attempt == 0 { continue }
-            if status == 429 || status >= 500, attempt < 3 {
-                try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(attempt))) * 1_000_000_000)
+            // Google reports per-minute quota exhaustion as 403 quotaExceeded / rateLimitExceeded.
+            let quota = status == 403 && (text.contains("quotaExceeded") || text.contains("rateLimitExceeded") || text.contains("userRateLimitExceeded"))
+            if status == 429 || status >= 500 || quota, attempt < maxAttempts - 1 {
+                let delay = quota ? min(60.0, 5.0 * pow(2.0, Double(attempt))) : pow(2.0, Double(attempt))
+                Log.warn("Google \(quota ? "quota" : status.description) hit; waiting \(Int(delay))s before retrying")
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 continue
             }
             throw err
         }
         throw lastError ?? RemTasksError("Google request failed")
+    }
+
+    private var maxAttempts: Int { 7 }
+
+    /// Space out writes so bursts (e.g. a first sync of hundreds of tasks) stay under Google's per-minute quota.
+    private var lastWrite = Date.distantPast
+    private func pace() async throws {
+        let gap = 0.25 - Date().timeIntervalSince(lastWrite)
+        if gap > 0 { try await Task.sleep(nanoseconds: UInt64(gap * 1_000_000_000)) }
+        lastWrite = Date()
     }
 }
