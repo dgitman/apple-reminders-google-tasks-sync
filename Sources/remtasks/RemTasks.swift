@@ -34,6 +34,9 @@ struct Context {
     static var logDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/remtasks", isDirectory: true)
     }
+    static var launcherDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/remtasks", isDirectory: true)
+    }
     static var agentPlist: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/\(agentLabel).plist")
     }
@@ -354,12 +357,21 @@ struct InstallAgent: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "install-agent", abstract: "Install a launchd agent that runs 'remtasks sync' periodically.")
     @OptionGroup var common: CommonOptions
     @Option(name: .long, help: "Seconds between runs.") var interval: Int = 300
+    @Option(name: .long, help: "Name shown under System Settings > Login Items > Allow in the Background.")
+    var displayName: String = "Apple Reminders & Google Tasks Sync"
 
     func run() async throws {
         let exe = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let exePath = exe.path.hasPrefix("/") ? exe.path : FileManager.default.currentDirectoryPath + "/" + exe.path
         try FileManager.default.createDirectory(at: Context.logDirectory, withIntermediateDirectories: true)
-        var args = [exePath, "sync"]
+        // macOS labels a plist-based agent with its executable's file name, so run the binary
+        // through a symlink carrying a readable name. The symlink shares the binary's signature,
+        // so permission grants (Reminders, Full Disk Access) are unaffected.
+        try FileManager.default.createDirectory(at: Context.launcherDirectory, withIntermediateDirectories: true)
+        let launcher = Context.launcherDirectory.appendingPathComponent(displayName.replacingOccurrences(of: "/", with: "-"))
+        try? FileManager.default.removeItem(at: launcher)
+        try FileManager.default.createSymbolicLink(atPath: launcher.path, withDestinationPath: exePath)
+        var args = [launcher.path, "sync"]
         if let c = common.config { args += ["--config", Config.expandTilde(c)] }
         let argXML = args.map { "        <string>\($0.xmlEscaped)</string>" }.joined(separator: "\n")
         let plist = """
@@ -391,7 +403,7 @@ struct InstallAgent: AsyncParsableCommand {
         try plist.write(to: Context.agentPlist, atomically: true, encoding: .utf8)
         let rc = shell("/bin/launchctl", ["bootstrap", "gui/\(getuid())", Context.agentPlist.path])
         guard rc == 0 else { throw RemTasksError("launchctl bootstrap failed (\(rc))") }
-        print("Installed \(Context.agentPlist.path); runs '\(exePath) sync' every \(interval)s. Logs: \(Context.logDirectory.path)")
+        print("Installed \(Context.agentPlist.path); runs '\(exePath) sync' every \(interval)s as \"\(displayName)\". Logs: \(Context.logDirectory.path)")
         print("If the agent cannot read the Reminders database, grant Full Disk Access to \(exePath) in System Settings > Privacy & Security.")
     }
 }
@@ -402,6 +414,7 @@ struct UninstallAgent: AsyncParsableCommand {
     func run() async throws {
         _ = shell("/bin/launchctl", ["bootout", "gui/\(getuid())/\(Context.agentLabel)"])
         try? FileManager.default.removeItem(at: Context.agentPlist)
+        try? FileManager.default.removeItem(at: Context.launcherDirectory)
         print("Removed \(Context.agentPlist.path)")
     }
 }

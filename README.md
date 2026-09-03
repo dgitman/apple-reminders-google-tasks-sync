@@ -138,6 +138,7 @@ remtasks sync --dry-run   # print every change the first sync would make
 remtasks sync             # do it
 remtasks status           # recent runs and pairing counts
 remtasks install-agent    # run 'remtasks sync' every 5 minutes via launchd
+remtasks install-agent --display-name "My Sync"   # name shown under Login Items > Allow in the Background
 ```
 
 The first time it touches Reminders, macOS asks for permission. The permission is attributed to the app that launched remtasks, so when you run it from Terminal, iTerm, or Warp, that app is what appears under System Settings > Privacy & Security > Reminders. Terminals embedded in other apps (editors, the Claude desktop app) usually lack a Reminders usage description and are refused silently with no dialog; use a standalone terminal, or install the launchd agent, which is prompted for as `remtasks` itself. If a dialog was dismissed, re-trigger it with `tccutil reset Reminders <bundle id>`.
