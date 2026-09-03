@@ -22,7 +22,7 @@ Apple Reminders (iCloud)                       Google Tasks
 - **List deletion** in both directions (opt-in via `safety.deleteLists`).
 - **Subtasks.** Apple subtasks become Google subtasks, and re-nesting in Apple is mirrored to Google. Google subtasks arrive in Apple as regular reminders (see limitations).
 - **Due times and alarms are preserved.** Google only stores a day; remtasks keeps your Apple time-of-day and alarms when Google changes the date, and gives Google-created tasks a default time and alarm you choose.
-- **Recurring reminders.** Apple owns the recurrence rule. Google sees the current occurrence; completing it in Google completes it in Apple, and the next occurrence becomes a new Google task.
+- **Recurring reminders.** Apple owns the recurrence rule. Google sees the current occurrence; completing it in Google completes it in Apple, Apple advances to the next occurrence, and that becomes a new Google task while the finished one stays completed as history.
 - **Safe by design:** local SQLite state bound to your specific iCloud and Google identities, a first run that only links and creates, a cap on deletions per run, a lock against concurrent runs, and `--dry-run`.
 
 ## Limitations (Google Tasks API)
@@ -113,6 +113,7 @@ Edit `~/.config/remtasks/config.json`:
 ```bash
 remtasks lists            # show every Reminders list, its group, and where it will sync
 remtasks google-lists     # show the Google Tasks lists in each account
+remtasks google-tasks Legal --all   # show the Google tasks paired with one Reminders list
 remtasks auth personal    # browser sign-in for each account key in your config
 remtasks auth work
 remtasks doctor           # check permissions, credentials, and the Reminders database

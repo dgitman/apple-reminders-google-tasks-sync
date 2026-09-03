@@ -8,7 +8,7 @@ struct RemTasks: AsyncParsableCommand {
         commandName: "remtasks",
         abstract: "Two-way sync between Apple Reminders and Google Tasks, across multiple Google accounts.",
         version: "0.1.0",
-        subcommands: [Lists.self, GoogleLists.self, Auth.self, Sync.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
+        subcommands: [Lists.self, GoogleLists.self, GoogleTasks.self, Auth.self, Sync.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
     )
 }
 
@@ -120,6 +120,36 @@ struct GoogleLists: AsyncParsableCommand {
                 let linked = listLinks.first { $0.googleListID == l.id }.map { "  <- Reminders \"\($0.name)\"" } ?? ""
                 print("  \(pad(l.title, 30)) \(open) open, \(tasks.count - open) done\(linked)")
             }
+        }
+    }
+}
+
+// MARK: - google-tasks
+
+struct GoogleTasks: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "google-tasks", abstract: "Show the Google tasks in one list (by Reminders list name).")
+    @OptionGroup var common: CommonOptions
+    @Argument(help: "Reminders list name (the paired Google list is used).") var list: String
+    @Flag(name: .long, help: "Include completed tasks.") var all = false
+
+    func run() async throws {
+        let ctx = try Context(common)
+        guard let ll = try ctx.state.listLinks().first(where: { $0.name.caseInsensitiveCompare(list) == .orderedSame }) else {
+            throw ValidationError("No paired Google list for '\(list)'. Run 'remtasks status' to see paired lists.")
+        }
+        let client = GoogleTasksClient(auth: ctx.auth, account: ll.account)
+        let tasks = try await client.tasks(listID: ll.googleListID)
+        let byID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let links = Dictionary(try ctx.state.links(forAppleList: ll.appleListID).map { ($0.googleID, $0) }, uniquingKeysWith: { a, _ in a })
+        print("\(ll.name) -> \(ll.account): \(tasks.count) tasks (\(tasks.filter { !$0.fields.completed }.count) open)")
+        for t in tasks.sorted(by: { ($0.parentID ?? $0.id, $0.parentID == nil ? "" : $0.position) < ($1.parentID ?? $1.id, $1.parentID == nil ? "" : $1.position) })
+            where all || !t.fields.completed {
+            let indent = t.parentID != nil ? "    " : "  "
+            let mark = t.fields.completed ? "[x]" : "[ ]"
+            let due = t.fields.dueDay.map { " due \($0)" } ?? ""
+            let paired = links[t.id] != nil ? "" : "  (not paired)"
+            let parent = t.parentID.flatMap { byID[$0] }.map { " (under \"\($0.fields.title)\")" } ?? ""
+            print("\(indent)\(mark) \(t.fields.title)\(due)\(parent)\(paired)")
         }
     }
 }
