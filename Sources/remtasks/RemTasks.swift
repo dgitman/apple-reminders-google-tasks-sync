@@ -446,9 +446,18 @@ struct InstallAgent: AsyncParsableCommand {
         """
         try FileManager.default.createDirectory(at: Context.agentPlist.deletingLastPathComponent(), withIntermediateDirectories: true)
         _ = shell("/bin/launchctl", ["bootout", "gui/\(getuid())/\(Context.agentLabel)"])
+        // bootout returns before a KeepAlive daemon has fully exited; bootstrapping too early fails.
+        for _ in 0..<40 where shell("/bin/launchctl", ["print", "gui/\(getuid())/\(Context.agentLabel)"]) == 0 {
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
         try plist.write(to: Context.agentPlist, atomically: true, encoding: .utf8)
-        let rc = shell("/bin/launchctl", ["bootstrap", "gui/\(getuid())", Context.agentPlist.path])
-        guard rc == 0 else { throw RemTasksError("launchctl bootstrap failed (\(rc))") }
+        var rc: Int32 = -1
+        for attempt in 0..<3 {
+            rc = shell("/bin/launchctl", ["bootstrap", "gui/\(getuid())", Context.agentPlist.path])
+            if rc == 0 { break }
+            try await Task.sleep(nanoseconds: UInt64(1 + attempt) * 1_000_000_000)
+        }
+        guard rc == 0 else { throw RemTasksError("launchctl bootstrap failed (\(rc)). Try: launchctl bootstrap gui/\(getuid()) \(Context.agentPlist.path)") }
         print("Installed \(Context.agentPlist.path); runs '\(exePath) daemon' (sync every \(interval)s) as \"\(displayName)\". Logs: \(Context.logDirectory.path)")
         print("If the agent cannot read the Reminders database, grant Full Disk Access to \(exePath) in System Settings > Privacy & Security.")
     }
