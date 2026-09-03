@@ -50,6 +50,7 @@ Google Tasks titles are capped at 1024 characters and notes at 8192; longer valu
 ```bash
 git clone https://github.com/dgitman/apple-reminders-google-tasks-sync.git
 cd apple-reminders-google-tasks-sync
+scripts/make-signing-identity.sh   # one time: stable code-signing certificate (see Full Disk Access below)
 scripts/install.sh
 ```
 
@@ -146,7 +147,7 @@ The first time it touches Reminders, macOS asks for permission. The permission i
 
 Google's Tasks API allows roughly 300 writes per minute per user. remtasks paces writes and backs off on quota errors, so a large first sync simply takes a few minutes.
 
-**Full Disk Access is tied to the binary's signature.** The install script ad-hoc signs the binary, and that signature changes with every build, so after re-running `scripts/install.sh` you must remove and re-add `remtasks` under Full Disk Access. Until you do, the agent falls back to cached group membership and skips subtask nesting, and `doctor` reports it. (Signing with a stable certificate would avoid this; see Contributing.)
+**Full Disk Access is tied to the binary's signature.** Run `scripts/make-signing-identity.sh` once: it creates a self-signed code-signing certificate in your login keychain (macOS asks for your password to trust it), and `scripts/install.sh` then signs every build with it, so the grant survives reinstalls. Without that identity the installer falls back to an ad-hoc signature, which changes with every build; you would then have to remove and re-add the binary under Full Disk Access after each reinstall. Until it is granted, the agent falls back to cached group membership and skips subtask nesting, and `doctor` reports it.
 
 The launchd agent cannot read the Reminders database unless you grant **Full Disk Access** to the `remtasks` binary (System Settings > Privacy & Security > Full Disk Access, press +, and pick `~/Library/Application Support/remtasks/Apple Reminders & Google Tasks Sync`; press Cmd+Shift+G in the file dialog to type the path). Without it the agent still syncs, using the group membership cached by the last run that could read the database (any `remtasks lists` or `sync` from a terminal), but subtasks created since then stay flat in Google until a terminal run or Full Disk Access.
 
@@ -183,7 +184,7 @@ Tests live in `Sources/remtasks-tests` as a plain executable so they run on Macs
 
 Issues and pull requests welcome. Please keep the planner pure and covered by tests, and never commit config, tokens, or state files.
 
-Wanted: a documented way to sign the binary with a stable self-signed code-signing identity so Full Disk Access survives rebuilds.
+Wanted: notarized builds under an Apple Developer ID so users need neither Gatekeeper workarounds nor a local signing identity.
 
 ## License
 

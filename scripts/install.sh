@@ -14,11 +14,18 @@ mkdir -p "$BIN_DIR" "$APP_DIR"
 echo "Building..."
 swift build -c release 2>&1 | tail -3
 cp .build/release/remtasks "$APP_DIR/$APP_NAME"
-codesign --force --sign - --identifier net.gitman.remtasks "$APP_DIR/$APP_NAME"
+# Prefer a stable signing identity (scripts/make-signing-identity.sh) so macOS permission
+# grants survive rebuilds; fall back to an ad-hoc signature, which changes every build.
+IDENTITY="${SIGNING_IDENTITY:-remtasks Code Signing}"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$IDENTITY\""; then
+  codesign --force --sign "$IDENTITY" --identifier net.gitman.remtasks --timestamp=none "$APP_DIR/$APP_NAME"
+  echo "Signed with \"$IDENTITY\" (permission grants persist across rebuilds)."
+else
+  codesign --force --sign - --identifier net.gitman.remtasks "$APP_DIR/$APP_NAME"
+  echo "Ad-hoc signed. Run scripts/make-signing-identity.sh once so Full Disk Access survives rebuilds."
+fi
 ln -sfn "$APP_DIR/$APP_NAME" "$BIN_DIR/remtasks"
 echo "Installed \"$APP_DIR/$APP_NAME\" (command: $BIN_DIR/remtasks)"
-echo "Note: the ad-hoc signature changes with every build, so re-add this file under"
-echo "System Settings > Privacy & Security > Full Disk Access after reinstalling."
 
 CONFIG_DIR="$HOME/.config/remtasks"
 mkdir -p "$CONFIG_DIR"
