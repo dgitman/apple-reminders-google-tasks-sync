@@ -245,6 +245,21 @@ final class ScopeTests {
     }
 }
 
+final class OnePasswordTests {
+    func testParsesItemJSON() throws {
+        let json: [String: Any] = ["title": "remtasks personal", "fields": [
+            ["id": "username", "type": "STRING", "label": "username", "value": "me@example.com"],
+            ["id": "credential", "type": "CONCEALED", "label": "credential", "value": "1//refresh"],
+            ["id": "notesPlain", "type": "STRING", "purpose": "NOTES", "label": "notesPlain", "value": "x"],
+        ]]
+        let t = OnePasswordTokenStorage.parse(json)
+        try expectEqual(t?.refreshToken, "1//refresh")
+        try expectEqual(t?.email, "me@example.com")
+        try expectEqual(t?.expiresAt, Date.distantPast)
+        try expectNil(OnePasswordTokenStorage.parse(["fields": [["id": "credential", "value": ""]]]))
+    }
+}
+
 final class ModelTests {
     func testDueDateKeepsTime() throws {
         let apple = DueDate(year: 2026, month: 9, day: 2, hour: 15, minute: 30)

@@ -8,7 +8,7 @@ struct RemTasks: AsyncParsableCommand {
         commandName: "remtasks",
         abstract: "Two-way sync between Apple Reminders and Google Tasks, across multiple Google accounts.",
         version: "0.1.0",
-        subcommands: [Lists.self, GoogleLists.self, GoogleTasks.self, Auth.self, Sync.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
+        subcommands: [Lists.self, GoogleLists.self, GoogleTasks.self, Auth.self, MigrateTokens.self, Sync.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
     )
 }
 
@@ -44,13 +44,34 @@ struct Context {
         config = try Config.load(from: opts.config)
         directory = opts.config.map { URL(fileURLWithPath: Config.expandTilde($0)).deletingLastPathComponent() } ?? Config.defaultDirectory
         state = try StateStore(path: directory.appendingPathComponent("state.sqlite").path)
-        let storage: TokenStorage = config.google.tokenStorage == "keychain"
-            ? KeychainTokenStorage()
-            : FileTokenStorage(directory: directory.appendingPathComponent("tokens", isDirectory: true))
-        auth = GoogleAuth(clientSecretURL: config.clientSecretURL, storage: storage)
+        let storage = try Context.makeStorage(kind: config.google.tokenStorage, config: config, directory: directory)
+        let secret: ClientSecretSource
+        if config.google.clientSecretIsOnePassword {
+            let op = try OnePassword(vault: config.google.onePassword.vault, opPath: config.google.onePassword.opPath)
+            secret = .onePassword(reference: config.google.clientSecretFile, op: op)
+        } else {
+            secret = .file(config.clientSecretURL)
+        }
+        auth = GoogleAuth(clientSecret: secret, storage: storage)
         let (h, w) = RemindersDatabase.load(overridePath: config.remindersDatabase)
         hierarchy = h
         hierarchyWarnings = w
+    }
+}
+
+extension Context {
+    static func makeStorage(kind: String, config: Config, directory: URL) throws -> TokenStorage {
+        switch kind {
+        case "keychain":
+            return KeychainTokenStorage()
+        case "1password":
+            let op = try OnePassword(vault: config.google.onePassword.vault, opPath: config.google.onePassword.opPath)
+            return OnePasswordTokenStorage(op: op, itemPrefix: config.google.onePassword.itemPrefix)
+        case "file":
+            return FileTokenStorage(directory: directory.appendingPathComponent("tokens", isDirectory: true))
+        default:
+            throw RemTasksError("Unknown token storage '\(kind)'. Use one of \(Config.storageKinds.joined(separator: ", ")).")
+        }
     }
 }
 
@@ -179,6 +200,34 @@ struct Auth: AsyncParsableCommand {
     }
 }
 
+// MARK: - migrate-tokens
+
+struct MigrateTokens: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "migrate-tokens", abstract: "Move stored Google tokens to another storage backend (file, keychain, 1password).")
+    @OptionGroup var common: CommonOptions
+    @Option(name: .long, help: "Target backend: file, keychain, or 1password.") var to: String
+    @Flag(name: .long, help: "Leave the tokens in the current backend as well.") var keep = false
+
+    func run() async throws {
+        let ctx = try Context(common)
+        let from = ctx.config.google.tokenStorage
+        guard from != to else { throw ValidationError("Tokens are already stored in '\(to)'.") }
+        let target = try Context.makeStorage(kind: to, config: ctx.config, directory: ctx.directory)
+        var moved = 0
+        for key in ctx.config.accounts.keys.sorted() {
+            guard let tokens = try ctx.auth.storage.load(account: key) else { print("  \(key): nothing stored in \(from)"); continue }
+            try target.save(tokens, account: key)
+            guard try target.load(account: key)?.refreshToken == tokens.refreshToken else {
+                throw RemTasksError("Verification failed after writing \(key) to \(to); nothing deleted.")
+            }
+            if !keep { try ctx.auth.storage.delete(account: key) }
+            print("  \(key): moved to \(to)\(keep ? " (kept in \(from))" : "")")
+            moved += 1
+        }
+        print("\n\(moved) account(s) migrated. Now set \"tokenStorage\": \"\(to)\" in \(ctx.directory.appendingPathComponent("config.json").path).")
+    }
+}
+
 // MARK: - sync
 
 struct Sync: AsyncParsableCommand {
@@ -245,8 +294,16 @@ struct Doctor: AsyncParsableCommand {
         do { ctx = try Context(common); ok("config loaded from \(ctx.directory.path)") }
         catch { bad("config: \(error)"); throw ExitCode(1) }
 
-        if FileManager.default.fileExists(atPath: ctx.config.clientSecretURL.path) { ok("Google OAuth client file present") }
-        else { bad("Google OAuth client file missing at \(ctx.config.clientSecretURL.path)") }
+        if ctx.config.google.tokenStorage == "1password" || ctx.config.google.clientSecretIsOnePassword {
+            do {
+                let op = try OnePassword(vault: ctx.config.google.onePassword.vault, opPath: ctx.config.google.onePassword.opPath)
+                try op.check()
+                ok("1Password CLI reachable, vault '\(op.vault)' accessible")
+            } catch { bad("1Password: \(error)") }
+        }
+        note("token storage: \(ctx.config.google.tokenStorage)")
+        do { ok("Google OAuth client loaded from \(try ctx.auth.checkClientSecret())") }
+        catch { bad("Google OAuth client: \(error)") }
 
         for (key, acct) in ctx.config.accounts.sorted(by: { $0.key < $1.key }) {
             do {
@@ -275,9 +332,9 @@ struct Doctor: AsyncParsableCommand {
             let store = RemindersStore()
             do {
                 let source = try store.source(titled: ctx.config.remindersSource)
-                let lists = store.lists(in: source, hierarchy: ctx.hierarchy)
+                let (lists, usedCache) = try ctx.state.listsWithGroups(store.lists(in: source, hierarchy: ctx.hierarchy), hierarchy: ctx.hierarchy)
                 let mapped = lists.filter { ctx.config.resolve(list: $0) != nil }
-                ok("Reminders source '\(source.title)': \(lists.count) lists, \(mapped.count) mapped")
+                ok("Reminders source '\(source.title)': \(lists.count) lists, \(mapped.count) mapped\(usedCache ? " (groups from cache)" : "")")
                 for l in lists where ctx.config.resolve(list: l) == nil { note("not synced: \(l.name)") }
             } catch { bad("\(error)") }
         }

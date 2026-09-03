@@ -106,7 +106,24 @@ Edit `~/.config/remtasks/config.json`:
 - `safety.maxDeletesPerRun`: more deletions than this in one run are skipped unless you pass `--allow-deletes`.
 - `safety.deleteLists`: propagate list deletions. Off by default.
 - `completedHistoryDays`: completed items older than this are left alone on both sides. They are not copied across on the first sync, and a pairing whose both halves have aged out is forgotten rather than treated as a deletion. Apple keeps a completed copy of every past occurrence of a recurring reminder, so without this the first sync would push years of history into Google.
-- `google.tokenStorage`: `file` stores refresh tokens as 0600 files under `~/.config/remtasks/tokens/`; `keychain` uses the macOS Keychain (may prompt after rebuilds when running from launchd).
+- `google.tokenStorage`: `file` stores refresh tokens as 0600 files under `~/.config/remtasks/tokens/`; `keychain` uses the macOS Keychain (may prompt after rebuilds when running from launchd); `1password` keeps them in 1Password (see below).
+
+## Keeping credentials in 1Password
+
+With `"tokenStorage": "1password"`, remtasks stores each account's refresh token as a 1Password "API Credential" item named `remtasks <account>` and never writes tokens to disk. Access tokens are minted per run and held in memory only. The OAuth client JSON can live in 1Password too. Requirements: the [1Password CLI](https://developer.1password.com/docs/cli/) (`brew install 1password-cli`) with the desktop app integration turned on (1Password > Settings > Developer > Integrate with 1Password CLI).
+
+```json
+"google": {
+  "clientSecretFile": "op://Private/remtasks google client/credential",
+  "tokenStorage": "1password",
+  "onePassword": { "vault": "Private", "itemPrefix": "remtasks" }
+}
+```
+
+- To move existing tokens: run `remtasks migrate-tokens --to 1password` **before** changing `tokenStorage`, then update the config. Add `--keep` to leave a copy in the old backend.
+- To store the OAuth client JSON: create an API Credential item in the vault (here titled `remtasks google client`) and paste the file's contents into its `credential` field, then point `clientSecretFile` at it with an `op://vault/item/field` reference and delete the file.
+- Sync runs need the 1Password app unlocked. While it is locked, a run logs an error and the next scheduled run retries. `remtasks doctor` checks that the CLI can reach the vault.
+- `onePassword.opPath` overrides the CLI location if it is not in `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ## Use
 
@@ -126,6 +143,8 @@ remtasks install-agent    # run 'remtasks sync' every 5 minutes via launchd
 The first time it touches Reminders, macOS asks for permission. The permission is attributed to the app that launched remtasks, so when you run it from Terminal, iTerm, or Warp, that app is what appears under System Settings > Privacy & Security > Reminders. Terminals embedded in other apps (editors, the Claude desktop app) usually lack a Reminders usage description and are refused silently with no dialog; use a standalone terminal, or install the launchd agent, which is prompted for as `remtasks` itself. If a dialog was dismissed, re-trigger it with `tccutil reset Reminders <bundle id>`.
 
 Google's Tasks API allows roughly 300 writes per minute per user. remtasks paces writes and backs off on quota errors, so a large first sync simply takes a few minutes.
+
+**Full Disk Access is tied to the binary's signature.** The install script ad-hoc signs the binary, and that signature changes with every build, so after re-running `scripts/install.sh` you must remove and re-add `remtasks` under Full Disk Access. Until you do, the agent falls back to cached group membership and skips subtask nesting, and `doctor` reports it. (Signing with a stable certificate would avoid this; see Contributing.)
 
 The launchd agent cannot read the Reminders database unless you grant **Full Disk Access** to the `remtasks` binary (System Settings > Privacy & Security > Full Disk Access, press +, and pick `~/.local/bin/remtasks`; press Cmd+Shift+G in the file dialog to type the path). Without it the agent still syncs, using the group membership cached by the last run that could read the database (any `remtasks lists` or `sync` from a terminal), but subtasks created since then stay flat in Google until a terminal run or Full Disk Access.
 
@@ -161,6 +180,8 @@ Tests live in `Sources/remtasks-tests` as a plain executable so they run on Macs
 ## Contributing
 
 Issues and pull requests welcome. Please keep the planner pure and covered by tests, and never commit config, tokens, or state files.
+
+Wanted: a documented way to sign the binary with a stable self-signed code-signing identity so Full Disk Access survives rebuilds.
 
 ## License
 

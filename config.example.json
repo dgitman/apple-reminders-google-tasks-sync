@@ -18,6 +18,7 @@
   "completedHistoryDays": 30,
   "google": {
     "clientSecretFile": "~/.config/remtasks/google-client.json",
-    "tokenStorage": "file"
+    "tokenStorage": "file",
+    "onePassword": { "vault": "Private", "itemPrefix": "remtasks" }
   }
 }

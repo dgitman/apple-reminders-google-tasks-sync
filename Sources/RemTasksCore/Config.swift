@@ -36,14 +36,40 @@ public struct Config: Codable, Equatable {
         }
     }
 
-    public struct Google: Codable, Equatable {
-        /// OAuth "Desktop app" client JSON downloaded from Google Cloud Console.
-        public var clientSecretFile: String
-        /// "file" (0600 JSON under the config dir) or "keychain".
-        public var tokenStorage: String
-        public init(clientSecretFile: String = "~/.config/remtasks/google-client.json", tokenStorage: String = "file") {
-            self.clientSecretFile = clientSecretFile; self.tokenStorage = tokenStorage
+    public struct OnePasswordSettings: Codable, Equatable {
+        public var vault: String
+        public var itemPrefix: String
+        public var opPath: String?
+        public init(vault: String = "Private", itemPrefix: String = "remtasks", opPath: String? = nil) {
+            self.vault = vault; self.itemPrefix = itemPrefix; self.opPath = opPath
         }
+        enum CodingKeys: String, CodingKey { case vault, itemPrefix, opPath }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            vault = try c.decodeIfPresent(String.self, forKey: .vault) ?? "Private"
+            itemPrefix = try c.decodeIfPresent(String.self, forKey: .itemPrefix) ?? "remtasks"
+            opPath = try c.decodeIfPresent(String.self, forKey: .opPath)
+        }
+    }
+
+    public struct Google: Codable, Equatable {
+        /// OAuth "Desktop app" client JSON: a file path, or an op:// reference to a 1Password field.
+        public var clientSecretFile: String
+        /// "file" (0600 JSON under the config dir), "keychain", or "1password".
+        public var tokenStorage: String
+        public var onePassword: OnePasswordSettings
+        public init(clientSecretFile: String = "~/.config/remtasks/google-client.json", tokenStorage: String = "file",
+                    onePassword: OnePasswordSettings = .init()) {
+            self.clientSecretFile = clientSecretFile; self.tokenStorage = tokenStorage; self.onePassword = onePassword
+        }
+        enum CodingKeys: String, CodingKey { case clientSecretFile, tokenStorage, onePassword }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            clientSecretFile = try c.decodeIfPresent(String.self, forKey: .clientSecretFile) ?? "~/.config/remtasks/google-client.json"
+            tokenStorage = try c.decodeIfPresent(String.self, forKey: .tokenStorage) ?? "file"
+            onePassword = try c.decodeIfPresent(OnePasswordSettings.self, forKey: .onePassword) ?? .init()
+        }
+        public var clientSecretIsOnePassword: Bool { clientSecretFile.hasPrefix("op://") }
     }
 
     public var accounts: [String: Account]
@@ -123,8 +149,8 @@ public struct Config: Codable, Equatable {
             throw RemTasksError("newTaskDefaults.dueTime '\(t)' is not HH:MM.")
         }
         if completedHistoryDays < 0 { throw RemTasksError("completedHistoryDays must be 0 or more.") }
-        if !["file", "keychain"].contains(google.tokenStorage) {
-            throw RemTasksError("google.tokenStorage must be 'file' or 'keychain'.")
+        if !Config.storageKinds.contains(google.tokenStorage) {
+            throw RemTasksError("google.tokenStorage must be one of \(Config.storageKinds.joined(separator: ", ")).")
         }
     }
 
@@ -155,4 +181,6 @@ public struct Config: Codable, Equatable {
     }
 
     public var clientSecretURL: URL { URL(fileURLWithPath: Config.expandTilde(google.clientSecretFile)) }
+
+    public static let storageKinds = ["file", "keychain", "1password"]
 }

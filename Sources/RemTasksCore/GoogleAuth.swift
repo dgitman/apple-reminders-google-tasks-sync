@@ -16,6 +16,25 @@ public protocol TokenStorage {
     func load(account: String) throws -> TokenSet?
     func save(_ tokens: TokenSet, account: String) throws
     func delete(account: String) throws
+    /// False for backends that only keep the refresh token; access tokens then live in memory.
+    var persistsAccessTokens: Bool { get }
+}
+
+public extension TokenStorage {
+    var persistsAccessTokens: Bool { true }
+}
+
+/// Where the Google OAuth client JSON comes from.
+public enum ClientSecretSource {
+    case file(URL)
+    case onePassword(reference: String, op: OnePassword)
+
+    public var description: String {
+        switch self {
+        case .file(let url): return url.path
+        case .onePassword(let ref, _): return ref
+        }
+    }
 }
 
 /// JSON files with 0600 permissions under the config directory.
@@ -100,24 +119,41 @@ struct GoogleClientSecret: Decodable {
 public final class GoogleAuth {
     public static let scopes = "https://www.googleapis.com/auth/tasks openid email"
 
-    private let clientSecretURL: URL
-    private let storage: TokenStorage
+    public let clientSecretSource: ClientSecretSource
+    public let storage: TokenStorage
     private var cache: [String: TokenSet] = [:]
     private var secret: GoogleClientSecret.Installed?
 
-    public init(clientSecretURL: URL, storage: TokenStorage) {
-        self.clientSecretURL = clientSecretURL
+    public init(clientSecret: ClientSecretSource, storage: TokenStorage) {
+        self.clientSecretSource = clientSecret
         self.storage = storage
+    }
+
+    public convenience init(clientSecretURL: URL, storage: TokenStorage) {
+        self.init(clientSecret: .file(clientSecretURL), storage: storage)
+    }
+
+    /// Loads and validates the OAuth client; returns a short description of where it came from.
+    @discardableResult
+    public func checkClientSecret() throws -> String {
+        _ = try loadSecret()
+        return clientSecretSource.description
     }
 
     private func loadSecret() throws -> GoogleClientSecret.Installed {
         if let secret { return secret }
-        guard FileManager.default.fileExists(atPath: clientSecretURL.path) else {
-            throw RemTasksError("Google OAuth client file not found at \(clientSecretURL.path). See README: 'Google Cloud setup'.")
+        let data: Data
+        switch clientSecretSource {
+        case .file(let url):
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw RemTasksError("Google OAuth client file not found at \(url.path). See README: 'Google Cloud setup'.")
+            }
+            data = try Data(contentsOf: url)
+        case .onePassword(let ref, let op):
+            data = try op.read(ref)
         }
-        let data = try Data(contentsOf: clientSecretURL)
         guard let creds = try JSONDecoder().decode(GoogleClientSecret.self, from: data).creds else {
-            throw RemTasksError("\(clientSecretURL.path) is not a Google OAuth client JSON (expected an 'installed' key).")
+            throw RemTasksError("\(clientSecretSource.description) is not a Google OAuth client JSON (expected an 'installed' key).")
         }
         secret = creds
         return creds
@@ -211,7 +247,7 @@ public final class GoogleAuth {
         }
         tokens.accessToken = access
         tokens.expiresAt = Date().addingTimeInterval((json["expires_in"] as? Double) ?? 3600)
-        try storage.save(tokens, account: account)
+        if storage.persistsAccessTokens { try storage.save(tokens, account: account) }
         cache[account] = tokens
         return access
     }
