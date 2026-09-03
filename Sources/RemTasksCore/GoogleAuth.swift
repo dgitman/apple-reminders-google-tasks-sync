@@ -250,9 +250,12 @@ public final class GoogleAuth {
         let json: [String: Any]
         do {
             json = try await tokenRequest(form, tokenURI: creds.token_uri)
-        } catch {
-            cache[account] = nil   // re-read storage next time; the token may have been replaced
-            throw error
+        } catch let e as TokenEndpointError where (400..<500).contains(e.status) {
+            // Google rejected the refresh token (revoked or replaced): re-read storage next time.
+            // Network failures deliberately keep the cache so a long-running process does not
+            // go back to its credential store (and possibly prompt) just because it was offline.
+            cache[account] = nil
+            throw e
         }
         guard let access = json["access_token"] as? String else {
             cache[account] = nil
@@ -265,6 +268,12 @@ public final class GoogleAuth {
         return access
     }
 
+    public struct TokenEndpointError: LocalizedError {
+        public let status: Int
+        public let message: String
+        public var errorDescription: String? { "Google token endpoint returned \(status): \(message)" }
+    }
+
     private func tokenRequest(_ form: [String: String], tokenURI: String?) async throws -> [String: Any] {
         var req = URLRequest(url: URL(string: tokenURI ?? "https://oauth2.googleapis.com/token")!)
         req.httpMethod = "POST"
@@ -275,7 +284,7 @@ public final class GoogleAuth {
         let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         guard (200..<300).contains(status) else {
             let desc = json["error_description"] as? String ?? json["error"] as? String ?? String(data: data, encoding: .utf8) ?? ""
-            throw RemTasksError("Google token endpoint returned \(status): \(desc)")
+            throw TokenEndpointError(status: status, message: desc)
         }
         return json
     }
