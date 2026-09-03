@@ -122,7 +122,7 @@ With `"tokenStorage": "1password"`, remtasks stores each account's refresh token
 
 - To move existing tokens: run `remtasks migrate-tokens --to 1password` **before** changing `tokenStorage`, then update the config. Add `--keep` to leave a copy in the old backend.
 - To store the OAuth client JSON: create an API Credential item in the vault (here titled `remtasks google client`) and paste the file's contents into its `credential` field, then point `clientSecretFile` at it with an `op://vault/item/field` reference and delete the file.
-- Sync runs need the 1Password app unlocked. While it is locked, a run logs an error and the next scheduled run retries. `remtasks doctor` checks that the CLI can reach the vault.
+- The 1Password CLI asks for authorization per process, so the background agent runs `remtasks daemon`, a single long-lived process that reads the vault once at startup and keeps tokens in memory. Expect one authorization prompt after login, not one per sync. If 1Password is locked at startup, the daemon logs an error and retries on the next cycle. After `remtasks auth`, restart the agent (`launchctl kickstart -k gui/$(id -u)/net.gitman.remtasks`) so it picks up the new token. `remtasks doctor` checks that the CLI can reach the vault.
 - `onePassword.opPath` overrides the CLI location if it is not in `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ## Use
@@ -137,7 +137,8 @@ remtasks doctor           # check permissions, credentials, and the Reminders da
 remtasks sync --dry-run   # print every change the first sync would make
 remtasks sync             # do it
 remtasks status           # recent runs and pairing counts
-remtasks install-agent    # run 'remtasks sync' every 5 minutes via launchd
+remtasks daemon           # run continuously, syncing every 5 minutes (what the agent runs)
+remtasks install-agent    # keep 'remtasks daemon' running in the background via launchd
 remtasks install-agent --display-name "My Sync"   # name shown under Login Items > Allow in the Background
 ```
 

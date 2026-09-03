@@ -8,7 +8,7 @@ struct RemTasks: AsyncParsableCommand {
         commandName: "remtasks",
         abstract: "Two-way sync between Apple Reminders and Google Tasks, across multiple Google accounts.",
         version: "0.1.0",
-        subcommands: [Lists.self, GoogleLists.self, GoogleTasks.self, Auth.self, MigrateTokens.self, Sync.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
+        subcommands: [Lists.self, GoogleLists.self, GoogleTasks.self, Auth.self, MigrateTokens.self, Sync.self, Daemon.self, Status.self, Doctor.self, InstallAgent.self, UninstallAgent.self]
     )
 }
 
@@ -257,6 +257,42 @@ struct Sync: AsyncParsableCommand {
     }
 }
 
+// MARK: - daemon
+
+struct Daemon: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Run continuously, syncing every --interval seconds. Credentials are read once at startup.")
+    @OptionGroup var common: CommonOptions
+    @Option(name: .long, help: "Seconds between sync passes.") var interval: Int = 300
+
+    func run() async throws {
+        let ctx = try Context(common)
+        guard let lock = RunLock(directory: ctx.directory) else {
+            throw RemTasksError("Another remtasks sync or daemon is already running.")
+        }
+        _ = lock
+        Log.info("Daemon started; syncing every \(interval)s. Restart it after editing config.json.")
+        var lastHierarchyWarning: String?
+        while true {
+            do {
+                let (hierarchy, warnings) = RemindersDatabase.load(overridePath: ctx.config.remindersDatabase)
+                // Repeat a persistent warning only when it changes, not every cycle.
+                let joined = warnings.joined(separator: " | ")
+                if joined != (lastHierarchyWarning ?? "") { warnings.forEach(Log.warn) }
+                lastHierarchyWarning = joined
+                let store = RemindersStore()
+                try await store.requestAccess()
+                let engine = SyncEngine(config: ctx.config, state: ctx.state, apple: store, auth: ctx.auth,
+                                        hierarchy: hierarchy, options: RunOptions())
+                let summary = try await engine.run()
+                Log.info("Done: \(summary.text)")
+            } catch {
+                Log.error("Sync failed: \(error)")
+            }
+            try await Task.sleep(nanoseconds: UInt64(max(30, interval)) * 1_000_000_000)
+        }
+    }
+}
+
 // MARK: - status
 
 struct Status: AsyncParsableCommand {
@@ -354,7 +390,7 @@ struct Doctor: AsyncParsableCommand {
 // MARK: - install-agent / uninstall-agent
 
 struct InstallAgent: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(commandName: "install-agent", abstract: "Install a launchd agent that runs 'remtasks sync' periodically.")
+    static let configuration = CommandConfiguration(commandName: "install-agent", abstract: "Install a launchd agent that keeps 'remtasks daemon' running in the background.")
     @OptionGroup var common: CommonOptions
     @Option(name: .long, help: "Seconds between runs.") var interval: Int = 300
     @Option(name: .long, help: "Name shown under System Settings > Login Items > Allow in the Background.")
@@ -370,7 +406,7 @@ struct InstallAgent: AsyncParsableCommand {
         let launcherName = displayName.replacingOccurrences(of: "/", with: "-")
         var args: [String]
         if exe.lastPathComponent == launcherName {
-            args = [exePath, "sync"]
+            args = [exePath, "daemon", "--interval", String(interval)]
         } else {
             try FileManager.default.createDirectory(at: Context.launcherDirectory, withIntermediateDirectories: true)
             let launcher = Context.launcherDirectory.appendingPathComponent(launcherName)
@@ -378,7 +414,7 @@ struct InstallAgent: AsyncParsableCommand {
                 try? FileManager.default.removeItem(at: launcher)
                 try FileManager.default.createSymbolicLink(atPath: launcher.path, withDestinationPath: exePath)
             }
-            args = [launcher.path, "sync"]
+            args = [launcher.path, "daemon", "--interval", String(interval)]
         }
         if let c = common.config { args += ["--config", Config.expandTilde(c)] }
         let argXML = args.map { "        <string>\($0.xmlEscaped)</string>" }.joined(separator: "\n")
@@ -393,10 +429,12 @@ struct InstallAgent: AsyncParsableCommand {
             <array>
         \(argXML)
             </array>
-            <key>StartInterval</key>
-            <integer>\(interval)</integer>
             <key>RunAtLoad</key>
             <true/>
+            <key>KeepAlive</key>
+            <true/>
+            <key>ThrottleInterval</key>
+            <integer>30</integer>
             <key>ProcessType</key>
             <string>Background</string>
             <key>StandardOutPath</key>
@@ -411,7 +449,7 @@ struct InstallAgent: AsyncParsableCommand {
         try plist.write(to: Context.agentPlist, atomically: true, encoding: .utf8)
         let rc = shell("/bin/launchctl", ["bootstrap", "gui/\(getuid())", Context.agentPlist.path])
         guard rc == 0 else { throw RemTasksError("launchctl bootstrap failed (\(rc))") }
-        print("Installed \(Context.agentPlist.path); runs '\(exePath) sync' every \(interval)s as \"\(displayName)\". Logs: \(Context.logDirectory.path)")
+        print("Installed \(Context.agentPlist.path); runs '\(exePath) daemon' (sync every \(interval)s) as \"\(displayName)\". Logs: \(Context.logDirectory.path)")
         print("If the agent cannot read the Reminders database, grant Full Disk Access to \(exePath) in System Settings > Privacy & Security.")
     }
 }

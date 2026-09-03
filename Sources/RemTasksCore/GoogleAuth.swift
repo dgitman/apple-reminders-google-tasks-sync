@@ -166,6 +166,12 @@ public final class GoogleAuth {
         return t
     }
 
+    /// Drop in-memory tokens so the next call re-reads the backend (used by long-running processes
+    /// after a refresh failure, e.g. when 'remtasks auth' replaced the token meanwhile).
+    public func forgetCachedTokens(account: String? = nil) {
+        if let account { cache[account] = nil } else { cache.removeAll() }
+    }
+
     public func signOut(account: String) throws {
         cache[account] = nil
         try storage.delete(account: account)
@@ -241,8 +247,15 @@ public final class GoogleAuth {
         let creds = try loadSecret()
         var form = ["client_id": creds.client_id, "refresh_token": tokens.refreshToken, "grant_type": "refresh_token"]
         if let s = creds.client_secret { form["client_secret"] = s }
-        let json = try await tokenRequest(form, tokenURI: creds.token_uri)
+        let json: [String: Any]
+        do {
+            json = try await tokenRequest(form, tokenURI: creds.token_uri)
+        } catch {
+            cache[account] = nil   // re-read storage next time; the token may have been replaced
+            throw error
+        }
         guard let access = json["access_token"] as? String else {
+            cache[account] = nil
             throw RemTasksError("Token refresh for '\(account)' failed. Run: remtasks auth \(account)")
         }
         tokens.accessToken = access
