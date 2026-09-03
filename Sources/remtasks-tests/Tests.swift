@@ -149,6 +149,17 @@ final class SyncPlannerTests {
         try expectEqual(plan([a], [g], [l]).actions, [.rollForward(l, a, g)])
     }
 
+    func testRecurringRollForwardPairsCompletedCopyWithOldGoogleTask() throws {
+        // Apple advanced the master (same id) and spawned a completed copy for the finished occurrence.
+        let master0 = apple("a1", "Pay rent", due: "2026-09-01", recurring: true)
+        let g = google("g1", "Pay rent", due: "2026-09-01", done: true, at: t1)
+        let l = link(master0, google("g1", "Pay rent", due: "2026-09-01"))
+        let master = apple("a1", "Pay rent", due: "2026-10-01", at: t1, recurring: true)
+        let copy = apple("a2", "Pay rent", due: "2026-09-01", done: true, at: t1)
+        let p = plan([master, copy], [g], [l])
+        try expectEqual(p.actions, [.rollForward(l, master, g), .adopt(copy, g, .none)])
+    }
+
     func testRecurringCompletedInGoogleBeforeAppleAdvancesCompletesApple() throws {
         let a = apple("a1", "Pay rent", due: "2026-09-01", recurring: true)
         let g0 = google("g1", "Pay rent", due: "2026-09-01")

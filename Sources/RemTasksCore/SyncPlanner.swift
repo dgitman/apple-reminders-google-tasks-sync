@@ -101,6 +101,9 @@ public enum SyncPlanner {
         let linkByApple = Dictionary(links.map { ($0.appleID, $0) }, uniquingKeysWith: { a, _ in a })
         var linkedApple = Set<String>()
         var linkedGoogle = Set<String>()
+        // Google tasks whose pairing is being replaced (recurring roll-forward). They become
+        // available for the completed copy Apple spawns for the finished occurrence.
+        var releasedGoogle = Set<String>()
 
         for link in links {
             linkedApple.insert(link.appleID)
@@ -130,6 +133,7 @@ public enum SyncPlanner {
                 if a.isRecurring, !a.fields.completed, g.fields.completed,
                    let day = a.fields.dueDay, day != link.dueDay {
                     actions.append(.rollForward(link, a, g))
+                    releasedGoogle.insert(g.id)
                     continue
                 }
                 let aChanged = a.fields.fingerprint != link.fingerprint
@@ -167,7 +171,7 @@ public enum SyncPlanner {
         // Items not yet paired. First try to pair by title+due to avoid duplicates
         // (first run, or state lost), then create the rest.
         let freeApple = apple.filter { !linkedApple.contains($0.id) }
-        var freeGoogle = google.filter { !linkedGoogle.contains($0.id) }
+        var freeGoogle = google.filter { !linkedGoogle.contains($0.id) || releasedGoogle.contains($0.id) }
         let googleByKey = Dictionary(grouping: freeGoogle, by: { $0.fields.matchKey })
         var adopted = Set<String>()
         var toCreate: [AppleItem] = []
@@ -180,7 +184,7 @@ public enum SyncPlanner {
                 toCreate.append(a)
             }
         }
-        freeGoogle.removeAll { adopted.contains($0.id) }
+        freeGoogle.removeAll { adopted.contains($0.id) || releasedGoogle.contains($0.id) }
 
         for a in parentsFirst(toCreate) { actions.append(.createGoogle(a)) }
         for g in freeGoogle.sorted(by: { ($0.parentID == nil ? 0 : 1, $0.position) < ($1.parentID == nil ? 0 : 1, $1.position) }) {

@@ -42,6 +42,7 @@ let runner = Runner()
     runner.test("SyncPlannerTests.testGoneOnBothSidesUnlinks") { try SyncPlannerTests().testGoneOnBothSidesUnlinks() }
     runner.test("SyncPlannerTests.testDeleteCapSuppressesDeletes") { try SyncPlannerTests().testDeleteCapSuppressesDeletes() }
     runner.test("SyncPlannerTests.testRecurringRollForward") { try SyncPlannerTests().testRecurringRollForward() }
+    runner.test("SyncPlannerTests.testRecurringRollForwardPairsCompletedCopyWithOldGoogleTask") { try SyncPlannerTests().testRecurringRollForwardPairsCompletedCopyWithOldGoogleTask() }
     runner.test("SyncPlannerTests.testRecurringCompletedInGoogleBeforeAppleAdvancesCompletesApple") { try SyncPlannerTests().testRecurringCompletedInGoogleBeforeAppleAdvancesCompletesApple() }
     runner.test("SyncPlannerTests.testSubtaskCreatedAfterParentAndMovedWhenParentLinked") { try SyncPlannerTests().testSubtaskCreatedAfterParentAndMovedWhenParentLinked() }
     runner.test("SyncPlannerTests.testHierarchyIgnoredWhenUnavailable") { try SyncPlannerTests().testHierarchyIgnoredWhenUnavailable() }
