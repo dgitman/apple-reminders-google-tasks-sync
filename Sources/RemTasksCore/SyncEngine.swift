@@ -68,7 +68,7 @@ public final class SyncEngine {
         let source = try apple.source(titled: config.remindersSource)
         try bindIdentity(sourceID: source.sourceIdentifier)
 
-        let appleLists = apple.lists(in: source, hierarchy: hierarchy)
+        let (appleLists, usedCache) = try state.listsWithGroups(apple.lists(in: source, hierarchy: hierarchy), hierarchy: hierarchy)
         var pairs: [(AppleList, Config.Resolved)] = []
         for l in appleLists {
             if let r = config.resolve(list: l) { pairs.append((l, r)) }
@@ -78,8 +78,12 @@ public final class SyncEngine {
             pairs = pairs.filter { $0.0.name.caseInsensitiveCompare(only) == .orderedSame }
             if pairs.isEmpty { throw RemTasksError("No mapped list named '\(only)'") }
         }
-        if !hierarchy.isAvailable, !config.groups.isEmpty {
-            warn("Reminders database unavailable: group-based mapping and subtasks are off this run.")
+        if !hierarchy.isAvailable {
+            if usedCache {
+                warn("Reminders database unreadable: using cached group membership; subtasks are not synced this run. Grant Full Disk Access to remtasks to fix.")
+            } else if !config.groups.isEmpty {
+                warn("Reminders database unreadable and no cached group membership yet: group-based mapping and subtasks are off this run. Run 'remtasks lists' once from a terminal to cache groups, or grant Full Disk Access to remtasks.")
+            }
         }
 
         var googleLists: [String: [GoogleList]] = [:]

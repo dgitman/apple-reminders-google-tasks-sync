@@ -37,6 +37,7 @@ public final class StateStore {
             name TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS list_groups (apple_list_id TEXT PRIMARY KEY, group_name TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             started_at REAL NOT NULL,
@@ -138,6 +139,37 @@ public final class StateStore {
 
     public func deleteListLink(appleListID: String) throws {
         try db.run("DELETE FROM list_links WHERE apple_list_id = ?", [appleListID])
+    }
+
+    // MARK: List group cache
+
+    /// Remember which group each list belongs to, learned from a run that could read the
+    /// Reminders database, so a launchd run without Full Disk Access can still map lists.
+    public func saveListGroups(_ lists: [AppleList]) throws {
+        try db.exec("DELETE FROM list_groups;")
+        for l in lists {
+            if let g = l.groupName { try db.run("INSERT INTO list_groups (apple_list_id, group_name) VALUES (?,?)", [l.id, g]) }
+        }
+    }
+
+    public func cachedListGroups() throws -> [String: String] {
+        var out: [String: String] = [:]
+        for r in try db.run("SELECT apple_list_id, group_name FROM list_groups") {
+            out[r["apple_list_id"].string ?? ""] = r["group_name"].string ?? ""
+        }
+        return out
+    }
+
+    /// Lists with group names filled in: live from the database when available, else from the cache.
+    /// Returns nil for `usedCache` when no fallback was needed.
+    public func listsWithGroups(_ lists: [AppleList], hierarchy: RemindersHierarchy) throws -> (lists: [AppleList], usedCache: Bool) {
+        if hierarchy.isAvailable {
+            try saveListGroups(lists)
+            return (lists, false)
+        }
+        let cache = try cachedListGroups()
+        guard !cache.isEmpty else { return (lists, false) }
+        return (lists.map { var l = $0; l.groupName = cache[l.id]; return l }, true)
     }
 
     // MARK: Meta

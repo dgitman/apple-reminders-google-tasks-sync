@@ -58,7 +58,10 @@ public enum RemindersDatabase {
             }
         }
         guard !paths.isEmpty else {
-            warnings.append("Reminders database not found under \(defaultStoreDirectory.path); subtasks and groups unavailable.")
+            let exists = FileManager.default.fileExists(atPath: defaultStoreDirectory.path)
+            warnings.append(exists
+                ? "Reminders database at \(defaultStoreDirectory.path) is not readable from this process (Full Disk Access needed for launchd runs)."
+                : "Reminders database not found under \(defaultStoreDirectory.path); subtasks and groups unavailable.")
             return (.unavailable, warnings)
         }
 

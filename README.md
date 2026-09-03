@@ -127,7 +127,7 @@ The first time it touches Reminders, macOS asks for permission. The permission i
 
 Google's Tasks API allows roughly 300 writes per minute per user. remtasks paces writes and backs off on quota errors, so a large first sync simply takes a few minutes.
 
-If you run the launchd agent and `doctor` reports the Reminders database is not readable, grant **Full Disk Access** to the `remtasks` binary in System Settings > Privacy & Security. Without it, sync still works but subtasks and group-based mapping are unavailable to the background agent.
+The launchd agent cannot read the Reminders database unless you grant **Full Disk Access** to the `remtasks` binary (System Settings > Privacy & Security > Full Disk Access, press +, and pick `~/.local/bin/remtasks`; press Cmd+Shift+G in the file dialog to type the path). Without it the agent still syncs, using the group membership cached by the last run that could read the database (any `remtasks lists` or `sync` from a terminal), but subtasks created since then stay flat in Google until a terminal run or Full Disk Access.
 
 Logs go to `~/Library/Logs/remtasks/`.
 

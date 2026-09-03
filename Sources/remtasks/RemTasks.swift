@@ -79,7 +79,7 @@ struct Lists: AsyncParsableCommand {
         let store = RemindersStore()
         try await store.requestAccess()
         let source = try store.source(titled: ctx.config.remindersSource)
-        let lists = store.lists(in: source, hierarchy: ctx.hierarchy)
+        let (lists, usedCache) = try ctx.state.listsWithGroups(store.lists(in: source, hierarchy: ctx.hierarchy), hierarchy: ctx.hierarchy)
         let counts = try ctx.state.linkCounts()
         let listLinks = Dictionary(try ctx.state.listLinks().map { ($0.appleListID, $0) }, uniquingKeysWith: { a, _ in a })
 
@@ -96,7 +96,8 @@ struct Lists: AsyncParsableCommand {
             print(pad(l.groupName ?? "", 14) + pad(l.name, 28) + pad(String(active), 8) + pad(subtasks == 0 ? "" : String(subtasks), 10) + pad(target, 44) + linked)
         }
         if !ctx.hierarchy.isAvailable {
-            print("\nNote: Reminders database not readable, so groups are unknown. Only explicit 'lists' rules apply.")
+            print(usedCache ? "\nNote: Reminders database not readable; groups shown from the last run that could read it."
+                            : "\nNote: Reminders database not readable and nothing cached, so groups are unknown. Only explicit 'lists' rules apply.")
         }
     }
 }
