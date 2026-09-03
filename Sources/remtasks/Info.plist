@@ -5,7 +5,9 @@
     <key>CFBundleIdentifier</key>
     <string>net.gitman.remtasks</string>
     <key>CFBundleName</key>
-    <string>remtasks</string>
+    <string>Apple Reminders &amp; Google Tasks Sync</string>
+    <key>CFBundleDisplayName</key>
+    <string>Apple Reminders &amp; Google Tasks Sync</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
     <key>CFBundleVersion</key>

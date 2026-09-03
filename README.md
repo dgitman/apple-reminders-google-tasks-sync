@@ -53,7 +53,7 @@ cd apple-reminders-google-tasks-sync
 scripts/install.sh
 ```
 
-This builds a release binary, installs it to `~/.local/bin/remtasks`, ad-hoc signs it so macOS remembers the Reminders permission, and creates `~/.config/remtasks/config.json` from the example if none exists.
+This builds a release binary, installs it as `~/Library/Application Support/remtasks/Apple Reminders & Google Tasks Sync` with `~/.local/bin/remtasks` symlinked to it (macOS shows a bare executable's file name in Full Disk Access and Background Items, so the real file carries the readable name), ad-hoc signs it, and creates `~/.config/remtasks/config.json` from the example if none exists.
 
 ## Google Cloud setup
 
@@ -147,7 +147,7 @@ Google's Tasks API allows roughly 300 writes per minute per user. remtasks paces
 
 **Full Disk Access is tied to the binary's signature.** The install script ad-hoc signs the binary, and that signature changes with every build, so after re-running `scripts/install.sh` you must remove and re-add `remtasks` under Full Disk Access. Until you do, the agent falls back to cached group membership and skips subtask nesting, and `doctor` reports it. (Signing with a stable certificate would avoid this; see Contributing.)
 
-The launchd agent cannot read the Reminders database unless you grant **Full Disk Access** to the `remtasks` binary (System Settings > Privacy & Security > Full Disk Access, press +, and pick `~/.local/bin/remtasks`; press Cmd+Shift+G in the file dialog to type the path). Without it the agent still syncs, using the group membership cached by the last run that could read the database (any `remtasks lists` or `sync` from a terminal), but subtasks created since then stay flat in Google until a terminal run or Full Disk Access.
+The launchd agent cannot read the Reminders database unless you grant **Full Disk Access** to the `remtasks` binary (System Settings > Privacy & Security > Full Disk Access, press +, and pick `~/Library/Application Support/remtasks/Apple Reminders & Google Tasks Sync`; press Cmd+Shift+G in the file dialog to type the path). Without it the agent still syncs, using the group membership cached by the last run that could read the database (any `remtasks lists` or `sync` from a terminal), but subtasks created since then stay flat in Google until a terminal run or Full Disk Access.
 
 Logs go to `~/Library/Logs/remtasks/`.
 

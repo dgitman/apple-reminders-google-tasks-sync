@@ -367,11 +367,19 @@ struct InstallAgent: AsyncParsableCommand {
         // macOS labels a plist-based agent with its executable's file name, so run the binary
         // through a symlink carrying a readable name. The symlink shares the binary's signature,
         // so permission grants (Reminders, Full Disk Access) are unaffected.
-        try FileManager.default.createDirectory(at: Context.launcherDirectory, withIntermediateDirectories: true)
-        let launcher = Context.launcherDirectory.appendingPathComponent(displayName.replacingOccurrences(of: "/", with: "-"))
-        try? FileManager.default.removeItem(at: launcher)
-        try FileManager.default.createSymbolicLink(atPath: launcher.path, withDestinationPath: exePath)
-        var args = [launcher.path, "sync"]
+        let launcherName = displayName.replacingOccurrences(of: "/", with: "-")
+        var args: [String]
+        if exe.lastPathComponent == launcherName {
+            args = [exePath, "sync"]
+        } else {
+            try FileManager.default.createDirectory(at: Context.launcherDirectory, withIntermediateDirectories: true)
+            let launcher = Context.launcherDirectory.appendingPathComponent(launcherName)
+            if launcher.path != exePath {
+                try? FileManager.default.removeItem(at: launcher)
+                try FileManager.default.createSymbolicLink(atPath: launcher.path, withDestinationPath: exePath)
+            }
+            args = [launcher.path, "sync"]
+        }
         if let c = common.config { args += ["--config", Config.expandTilde(c)] }
         let argXML = args.map { "        <string>\($0.xmlEscaped)</string>" }.joined(separator: "\n")
         let plist = """
@@ -414,7 +422,6 @@ struct UninstallAgent: AsyncParsableCommand {
     func run() async throws {
         _ = shell("/bin/launchctl", ["bootout", "gui/\(getuid())/\(Context.agentLabel)"])
         try? FileManager.default.removeItem(at: Context.agentPlist)
-        try? FileManager.default.removeItem(at: Context.launcherDirectory)
         print("Removed \(Context.agentPlist.path)")
     }
 }

@@ -5,14 +5,20 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
-mkdir -p "$BIN_DIR"
+# The real binary lives here under a readable name: macOS shows a bare executable's file name
+# in Full Disk Access and Background Items. ~/.local/bin/remtasks is a symlink to it.
+APP_NAME="${APP_NAME:-Apple Reminders & Google Tasks Sync}"
+APP_DIR="$HOME/Library/Application Support/remtasks"
+mkdir -p "$BIN_DIR" "$APP_DIR"
 
 echo "Building..."
 swift build -c release 2>&1 | tail -3
-cp .build/release/remtasks "$BIN_DIR/remtasks"
-# A stable ad-hoc signature keeps the Reminders permission grant attached to the binary.
-codesign --force --sign - --identifier net.gitman.remtasks "$BIN_DIR/remtasks"
-echo "Installed $BIN_DIR/remtasks"
+cp .build/release/remtasks "$APP_DIR/$APP_NAME"
+codesign --force --sign - --identifier net.gitman.remtasks "$APP_DIR/$APP_NAME"
+ln -sfn "$APP_DIR/$APP_NAME" "$BIN_DIR/remtasks"
+echo "Installed \"$APP_DIR/$APP_NAME\" (command: $BIN_DIR/remtasks)"
+echo "Note: the ad-hoc signature changes with every build, so re-add this file under"
+echo "System Settings > Privacy & Security > Full Disk Access after reinstalling."
 
 CONFIG_DIR="$HOME/.config/remtasks"
 mkdir -p "$CONFIG_DIR"
