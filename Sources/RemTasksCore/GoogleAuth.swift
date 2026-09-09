@@ -279,7 +279,7 @@ public final class GoogleAuth {
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         req.httpBody = Data(form.map { "\($0.key)=\(Self.formEncode($0.value))" }.joined(separator: "&").utf8)
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await HTTP.session.data(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         guard (200..<300).contains(status) else {

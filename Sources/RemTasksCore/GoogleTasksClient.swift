@@ -7,7 +7,7 @@ public final class GoogleTasksClient {
     private let base = "https://tasks.googleapis.com/tasks/v1"
     private let session: URLSession
 
-    public init(auth: GoogleAuth, account: String, session: URLSession = .shared) {
+    public init(auth: GoogleAuth, account: String, session: URLSession = HTTP.session) {
         self.auth = auth; self.account = account; self.session = session
     }
 

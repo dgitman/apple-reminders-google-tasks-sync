@@ -1,5 +1,18 @@
 import Foundation
 
+/// URLSession without an on-disk cache. API traffic gains nothing from caching, and a disk cache
+/// under ~/Library/Caches gets deleted by cleanup tools while a long-running daemon has it open,
+/// which produces a stream of SQLite "disk I/O error" messages.
+public enum HTTP {
+    public static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 60
+        return URLSession(configuration: config)
+    }()
+}
+
 public enum Log {
     public static var verbose = false
     public static var quiet = false
@@ -35,6 +48,8 @@ public enum Log {
             let out = toStderr ? FileHandle.standardError : FileHandle.standardOutput
             out.write(Data(line.utf8))
         }
+        // Seek every time so a log file truncated by a cleanup tool doesn't get a hole of NULs.
+        handle?.seekToEndOfFile()
         handle?.write(Data(line.utf8))
     }
 }
