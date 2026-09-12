@@ -255,7 +255,7 @@ public final class GoogleAuth {
             // Network failures deliberately keep the cache so a long-running process does not
             // go back to its credential store (and possibly prompt) just because it was offline.
             cache[account] = nil
-            throw e
+            throw AuthRevokedError(account: account, underlying: e)
         }
         guard let access = json["access_token"] as? String else {
             cache[account] = nil
@@ -266,6 +266,20 @@ public final class GoogleAuth {
         if storage.persistsAccessTokens { try storage.save(tokens, account: account) }
         cache[account] = tokens
         return access
+    }
+
+    /// Google no longer accepts the stored refresh token; the user has to sign in again.
+    public struct AuthRevokedError: LocalizedError {
+        public let account: String
+        public let underlying: TokenEndpointError
+        public var errorDescription: String? {
+            """
+            Google refresh token for account '\(account)' has expired or been revoked (\(underlying.message)). \
+            Run: remtasks auth \(account)  (then restart the background agent). \
+            If this happens every 7 days, your OAuth consent screen is in 'Testing' mode: in Google Cloud Console \
+            open APIs & Services > OAuth consent screen (Audience) and click 'Publish app'.
+            """
+        }
     }
 
     public struct TokenEndpointError: LocalizedError {

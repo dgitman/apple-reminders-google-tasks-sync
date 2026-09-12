@@ -62,7 +62,7 @@ Every user supplies their own OAuth client so that nobody's tokens flow through 
 
 1. Open [console.cloud.google.com](https://console.cloud.google.com/) and create a project (any name, for example `remtasks`).
 2. **APIs & Services > Library**: enable **Google Tasks API**.
-3. **APIs & Services > OAuth consent screen**: choose **External**, fill in the app name and your email. Under **Test users**, add **every Google account you will sync**. (Keeping the app in "Testing" is fine for personal use.)
+3. **APIs & Services > OAuth consent screen**: choose **External**, fill in the app name and your email. Then, under **Audience**, click **Publish app**. While an app stays in "Testing", Google expires its refresh tokens after 7 days and you would have to sign in again every week. Publishing an unverified app is fine for personal use: the sign-in page shows a "Google hasn't verified this app" warning that you click through once per account.
 4. **APIs & Services > Credentials > Create credentials > OAuth client ID**: application type **Desktop app**.
 5. Download the JSON and save it as `~/.config/remtasks/google-client.json`.
 
@@ -123,6 +123,7 @@ With `"tokenStorage": "1password"`, remtasks stores each account's refresh token
 
 - To move existing tokens: run `remtasks migrate-tokens --to 1password` **before** changing `tokenStorage`, then update the config. Add `--keep` to leave a copy in the old backend.
 - To store the OAuth client JSON: create an API Credential item in the vault (here titled `remtasks google client`) and paste the file's contents into its `credential` field, then point `clientSecretFile` at it with an `op://vault/item/field` reference and delete the file.
+- If a sync run reports that a Google token has expired or been revoked, run `remtasks auth <account>` again and restart the agent. The daemon backs off to one attempt every 30 minutes and posts a macOS notification while sign-in is needed.
 - The 1Password CLI asks for authorization per process, so the background agent runs `remtasks daemon`, a single long-lived process that reads the vault once at startup and keeps tokens in memory. Expect one authorization prompt after login, not one per sync. If 1Password is locked at startup, the daemon logs an error and retries on the next cycle. After `remtasks auth`, restart the agent (`launchctl kickstart -k gui/$(id -u)/net.gitman.remtasks`) so it picks up the new token. `remtasks doctor` checks that the CLI can reach the vault.
 - `onePassword.opPath` overrides the CLI location if it is not in `/opt/homebrew/bin` or `/usr/local/bin`.
 

@@ -272,7 +272,10 @@ struct Daemon: AsyncParsableCommand {
         _ = lock
         Log.info("Daemon started; syncing every \(interval)s. Restart it after editing config.json.")
         var lastHierarchyWarning: String?
+        var consecutiveFailures = 0
+        var lastNotified: Date = .distantPast
         while true {
+            var delay = max(30, interval)
             do {
                 let (hierarchy, warnings) = RemindersDatabase.load(overridePath: ctx.config.remindersDatabase)
                 // Repeat a persistent warning only when it changes, not every cycle.
@@ -285,11 +288,29 @@ struct Daemon: AsyncParsableCommand {
                                         hierarchy: hierarchy, options: RunOptions())
                 let summary = try await engine.run()
                 Log.info("Done: \(summary.text)")
+                consecutiveFailures = 0
             } catch {
+                consecutiveFailures += 1
                 Log.error("Sync failed: \(error)")
+                if error is GoogleAuth.AuthRevokedError {
+                    // Sign-in is needed; polling every few minutes only spams the log (and 1Password).
+                    delay = max(delay, 1800)
+                    if Date().timeIntervalSince(lastNotified) > 6 * 3600 {
+                        notify("Google sign-in expired. Run 'remtasks auth' in a terminal, then restart the agent.")
+                        lastNotified = Date()
+                    }
+                } else if consecutiveFailures == 6, Date().timeIntervalSince(lastNotified) > 6 * 3600 {
+                    notify("Sync has failed \(consecutiveFailures) times in a row. Check ~/Library/Logs/remtasks/agent.log.")
+                    lastNotified = Date()
+                }
             }
-            try await Task.sleep(nanoseconds: UInt64(max(30, interval)) * 1_000_000_000)
+            try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
         }
+    }
+
+    private func notify(_ message: String) {
+        let escaped = message.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        _ = shell("/usr/bin/osascript", ["-e", "display notification \"\(escaped)\" with title \"Apple Reminders & Google Tasks Sync\""])
     }
 }
 
