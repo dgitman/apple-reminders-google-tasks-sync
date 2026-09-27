@@ -49,7 +49,9 @@ struct Context {
         state = try StateStore(path: directory.appendingPathComponent("state.sqlite").path)
         let storage = try Context.makeStorage(kind: config.google.tokenStorage, config: config, directory: directory)
         let secret: ClientSecretSource
-        if config.google.clientSecretIsOnePassword {
+        if let inline = config.google.oauthClient {
+            secret = .inline(inline)
+        } else if config.google.clientSecretIsOnePassword {
             let op = try OnePassword(vault: config.google.onePassword.vault, opPath: config.google.onePassword.opPath)
             secret = .onePassword(reference: config.google.clientSecretFile, op: op)
         } else {
@@ -65,6 +67,8 @@ struct Context {
 extension Context {
     static func makeStorage(kind: String, config: Config, directory: URL) throws -> TokenStorage {
         switch kind {
+        case "config":
+            return ConfigTokenStorage(accounts: config.accounts)
         case "keychain":
             return KeychainTokenStorage()
         case "1password":
@@ -185,6 +189,7 @@ struct Auth: AsyncParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Sign in to a Google account named in the config (opens a browser).")
     @OptionGroup var common: CommonOptions
     @Argument(help: "Account key from config.json, e.g. personal or work.") var account: String
+    @Flag(name: .customLong("store-in-1password"), help: "Save renewed credentials to 1Password; then regenerate config.json with chezmoi and restart the agent.") var storeIn1password = false
     @Flag(help: "Forget the stored token instead of signing in.") var signOut = false
 
     func run() async throws {
@@ -192,13 +197,24 @@ struct Auth: AsyncParsableCommand {
         guard let acct = ctx.config.accounts[account] else {
             throw ValidationError("Unknown account '\(account)'. Configured: \(ctx.config.accounts.keys.sorted().joined(separator: ", "))")
         }
+        if storeIn1password && signOut { throw ValidationError("--store-in-1password cannot be combined with --sign-out.") }
+        if ctx.config.google.tokenStorage == "config" && !storeIn1password {
+            throw ValidationError("Config credentials are read-only. To renew: remtasks auth \(account) --store-in-1password; then apply the chezmoi config template and restart the agent. To remove access, revoke the credential and update its source.")
+        }
+        let auth = storeIn1password
+            ? GoogleAuth(clientSecret: ctx.auth.clientSecretSource,
+                         storage: try Context.makeStorage(kind: "1password", config: ctx.config, directory: ctx.directory))
+            : ctx.auth
         if signOut {
-            try ctx.auth.signOut(account: account)
+            try auth.signOut(account: account)
             print("Signed out of \(account).")
             return
         }
-        let tokens = try await ctx.auth.signIn(account: account, expectedEmail: acct.email)
-        let lists = try await GoogleTasksClient(auth: ctx.auth, account: account).lists()
+        let tokens = try await auth.signIn(account: account, expectedEmail: acct.email)
+        if storeIn1password {
+            print("Saved credentials in 1Password. Regenerate config.json with chezmoi and restart the background agent to use them.")
+        }
+        let lists = try await GoogleTasksClient(auth: auth, account: account).lists()
         print("Signed in to \(account) as \(tokens.email). Google Tasks lists: \(lists.map(\.title).joined(separator: ", "))")
     }
 }
@@ -215,6 +231,8 @@ struct MigrateTokens: AsyncParsableCommand {
         let ctx = try Context(common)
         let from = ctx.config.google.tokenStorage
         guard from != to else { throw ValidationError("Tokens are already stored in '\(to)'.") }
+        guard to != "config" else { throw ValidationError("Generate config credentials using a chezmoi template; migrate-tokens cannot write config.json.") }
+        guard from != "config" || keep else { throw ValidationError("Config credentials are read-only; use --keep when copying them to another backend.") }
         let target = try Context.makeStorage(kind: to, config: ctx.config, directory: ctx.directory)
         var moved = 0
         for key in ctx.config.accounts.keys.sorted() {
@@ -296,7 +314,7 @@ struct Daemon: AsyncParsableCommand {
                     // Sign-in is needed; polling every few minutes only spams the log (and 1Password).
                     delay = max(delay, 1800)
                     if Date().timeIntervalSince(lastNotified) > 6 * 3600 {
-                        notify("Google sign-in expired. Run 'remtasks auth' in a terminal, then restart the agent.")
+                        notify("Google sign-in expired. Run 'remtasks auth' to renew credentials; for config storage, use --store-in-1password and regenerate the chezmoi config before restarting.")
                         lastNotified = Date()
                     }
                 } else if consecutiveFailures == 6, Date().timeIntervalSince(lastNotified) > 6 * 3600 {

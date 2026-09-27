@@ -313,3 +313,60 @@ final class ConfigTests {
         try expectThrows(try cfg.validate())
     }
 }
+
+
+final class ConfigCredentialTests {
+    func config() throws -> Config {
+        let json = #"{"accounts":{"personal":{"email":"test@example.com","refreshToken":"test-refresh"}},"google":{"tokenStorage":"config","clientSecretFile":"op://must-not-be-read/client/credential","oauthClient":{"installed":{"client_id":"test-id","client_secret":"test-secret"}}}}"#
+        return try JSONDecoder().decode(Config.self, from: Data(json.utf8))
+    }
+
+    func testInlineCredentialsAndRoundTrip() throws {
+        let c = try config()
+        try c.validate()
+        try expectEqual(c.google.clientSecretIsOnePassword, false)
+        let decoded = try JSONDecoder().decode(Config.self, from: JSONEncoder().encode(c))
+        try expectEqual(decoded, c)
+        let auth = GoogleAuth(clientSecret: .inline(c.google.oauthClient!), storage: ConfigTokenStorage(accounts: c.accounts))
+        try expectEqual(try auth.checkClientSecret(), "config.json (google.oauthClient)")
+        try expectEqual(try auth.storedTokens(account: "personal")?.refreshToken, "test-refresh")
+    }
+
+    func testConfigStorageIsReadOnly() throws {
+        let c = try config()
+        let storage = ConfigTokenStorage(accounts: c.accounts)
+        try expectEqual(storage.persistsAccessTokens, false)
+        let token = try storage.load(account: "personal")!
+        try expectEqual(token.accessToken, "")
+        try expectEqual(token.expiresAt, .distantPast)
+        try expectThrows(try storage.save(token, account: "personal"))
+        try expectThrows(try storage.delete(account: "personal"))
+        try expectEqual(try storage.load(account: "personal"), token)
+        try expectNil(try storage.load(account: "missing"))
+    }
+
+    func testMissingCredentialsFailWithoutLeakingSecrets() throws {
+        var c = try config()
+        c.accounts["personal"]?.refreshToken = "  "
+        try expectThrows(try c.validate())
+        c = try config()
+        c.google.oauthClient = nil
+        try expectThrows(try c.validate())
+        c = try config()
+        c.google.oauthClient = try JSONDecoder().decode(GoogleClientSecret.self, from: Data(#"{"installed":{"client_id":"","client_secret":"do-not-print"}}"#.utf8))
+        do {
+            try c.validate()
+            throw TestFailure(description: "Expected invalid client to be rejected")
+        } catch let error as RemTasksError {
+            try expectEqual(error.localizedDescription.contains("do-not-print"), false)
+        }
+    }
+
+    func testExistingFileConfigStillLoads() throws {
+        let c = try JSONDecoder().decode(Config.self, from: Data(#"{"accounts":{"personal":{"email":"test@example.com"}}}"#.utf8))
+        try c.validate()
+        try expectEqual(c.google.tokenStorage, "file")
+        try expectNil(c.google.oauthClient)
+        try expectNil(c.accounts["personal"]?.refreshToken)
+    }
+}

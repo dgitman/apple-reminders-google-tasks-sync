@@ -56,5 +56,9 @@ let runner = Runner()
     runner.test("ModelTests.testTimeOfDay") { try ModelTests().testTimeOfDay() }
     runner.test("ConfigTests.testResolveMapping") { try ConfigTests().testResolveMapping() }
     runner.test("ConfigTests.testValidationRejectsUnknownAccount") { try ConfigTests().testValidationRejectsUnknownAccount() }
+runner.test("ConfigCredentialTests.testInlineCredentialsAndRoundTrip") { try ConfigCredentialTests().testInlineCredentialsAndRoundTrip() }
+runner.test("ConfigCredentialTests.testConfigStorageIsReadOnly") { try ConfigCredentialTests().testConfigStorageIsReadOnly() }
+runner.test("ConfigCredentialTests.testMissingCredentialsFailWithoutLeakingSecrets") { try ConfigCredentialTests().testMissingCredentialsFailWithoutLeakingSecrets() }
+runner.test("ConfigCredentialTests.testExistingFileConfigStillLoads") { try ConfigCredentialTests().testExistingFileConfigStillLoads() }
 print("\n\(runner.passed) passed, \(runner.failed) failed")
 exit(runner.failed == 0 ? 0 : 1)

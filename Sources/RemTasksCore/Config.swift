@@ -5,7 +5,8 @@ public struct Config: Codable, Equatable {
 
     public struct Account: Codable, Equatable {
         public var email: String
-        public init(email: String) { self.email = email }
+        public var refreshToken: String?
+        public init(email: String, refreshToken: String? = nil) { self.email = email; self.refreshToken = refreshToken }
     }
 
     public struct ListRule: Codable, Equatable {
@@ -55,21 +56,25 @@ public struct Config: Codable, Equatable {
     public struct Google: Codable, Equatable {
         /// OAuth "Desktop app" client JSON: a file path, or an op:// reference to a 1Password field.
         public var clientSecretFile: String
-        /// "file" (0600 JSON under the config dir), "keychain", or "1password".
+        /// Inline Google OAuth client JSON; takes precedence over clientSecretFile.
+        public var oauthClient: GoogleClientSecret?
+        /// "file", "keychain", "1password", or read-only "config".
         public var tokenStorage: String
         public var onePassword: OnePasswordSettings
         public init(clientSecretFile: String = "~/.config/remtasks/google-client.json", tokenStorage: String = "file",
-                    onePassword: OnePasswordSettings = .init()) {
+                    onePassword: OnePasswordSettings = .init(), oauthClient: GoogleClientSecret? = nil) {
+            self.oauthClient = oauthClient
             self.clientSecretFile = clientSecretFile; self.tokenStorage = tokenStorage; self.onePassword = onePassword
         }
-        enum CodingKeys: String, CodingKey { case clientSecretFile, tokenStorage, onePassword }
+        enum CodingKeys: String, CodingKey { case clientSecretFile, oauthClient, tokenStorage, onePassword }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
+            oauthClient = try c.decodeIfPresent(GoogleClientSecret.self, forKey: .oauthClient)
             clientSecretFile = try c.decodeIfPresent(String.self, forKey: .clientSecretFile) ?? "~/.config/remtasks/google-client.json"
             tokenStorage = try c.decodeIfPresent(String.self, forKey: .tokenStorage) ?? "file"
             onePassword = try c.decodeIfPresent(OnePasswordSettings.self, forKey: .onePassword) ?? .init()
         }
-        public var clientSecretIsOnePassword: Bool { clientSecretFile.hasPrefix("op://") }
+        public var clientSecretIsOnePassword: Bool { oauthClient == nil && clientSecretFile.hasPrefix("op://") }
     }
 
     public var accounts: [String: Account]
@@ -133,6 +138,21 @@ public struct Config: Codable, Equatable {
     }
 
     public func validate() throws {
+        if let client = google.oauthClient {
+            guard let creds = client.creds, !creds.client_id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw RemTasksError("google.oauthClient must contain an installed or web OAuth client with a nonempty client_id.")
+            }
+        }
+        if google.tokenStorage == "config" {
+            guard google.oauthClient != nil else {
+                throw RemTasksError("config token storage requires google.oauthClient so startup needs no external credential store.")
+            }
+            for (key, account) in accounts {
+                guard let token = account.refreshToken, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw RemTasksError("Account '\(key)' needs a refreshToken in config.json. Regenerate it from your credential source.")
+                }
+            }
+        }
         if accounts.isEmpty { throw RemTasksError("Config has no accounts.") }
         for (group, key) in groups where accounts[key] == nil {
             throw RemTasksError("Group '\(group)' maps to unknown account '\(key)'.")
@@ -182,5 +202,5 @@ public struct Config: Codable, Equatable {
 
     public var clientSecretURL: URL { URL(fileURLWithPath: Config.expandTilde(google.clientSecretFile)) }
 
-    public static let storageKinds = ["file", "keychain", "1password"]
+    public static let storageKinds = ["file", "keychain", "1password", "config"]
 }
